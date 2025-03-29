@@ -1,0 +1,34 @@
+# Node frontend (React + Vite)
+node_modules/
+dist/
+build/
+.vite/
+.env
+.env.local
+.env.*.local
+
+# Python backend (Flask)
+__pycache__/
+*.pyc
+instance/
+*.db
+.env
+*.env
+*.log
+
+# macOS
+.DS_Store
+
+# System files
+Thumbs.db
+
+# VSCode or JetBrains IDEs
+.vscode/
+.idea/
+
+# Misc
+*.sqlite
+*.xlsx
+*.csv
+*.xls
+debug_*.html
