@@ -1,5 +1,6 @@
-import { TextField } from "@mui/material";
 import React from "react";
+import { Box, TextField, Typography } from "@mui/material";
+import LabeledInputWrapper from "./LabeledInputWrapper";
 
 interface RollingDaysInputProps {
 	rollingDays: number;
@@ -16,13 +17,17 @@ const RollingDaysInput: React.FC<RollingDaysInputProps> = ({
 	};
 
 	return (
-		<TextField
-			label="Rolling Days"
-			type="number"
-			value={rollingDays.toString()}
-			onChange={handleChange}
-			fullWidth
-		/>
+		<Box mb={4} mt={3}>
+			<Typography variant="h6" mb={2}>
+				Select Date Ranges
+			</Typography>
+			<TextField
+				type="number"
+				value={rollingDays.toString()}
+				onChange={handleChange}
+				fullWidth
+			/>
+		</Box>
 	);
 };
 

@@ -1,23 +1,30 @@
 import React, { useState } from "react";
-import { Container, Typography, Paper, Box } from "@mui/material";
+import {
+	Container,
+	Typography,
+	Paper,
+	Box,
+	Grid2,
+	Divider,
+} from "@mui/material";
 import dayjs from "dayjs";
 import axios from "axios";
 
-import CryptoSelector from "./components/CryptoSelector";
+import Header from "./components/Header";
+import CoinSelector from "./components/CoinSelector";
 import DateRangeSelector from "./components/DateRangeSelector";
 import { DateRangeEntry } from "./components/DateRangeSelector.types";
 import RollingDaysInput from "./components/RollingDaysInput";
 import SubmitButton from "./components/SubmitButton";
 import ResultsTable from "./components/ResultsTable";
 import CryptoThresholdInput from "./components/CryptoThresholdInput";
+import PolymarketBetTypeSelector from "./components/PolymarketBetTypeSelector";
+import { POLYMARKET_BET_TYPES } from "./constraints/betTypes";
+
+type Coin = "BTC" | "ETH" | "SOL" | "XRP";
 
 const App: React.FC = () => {
-	const [cryptos, setCryptos] = useState<string[]>([
-		"BTC",
-		"ETH",
-		"SOL",
-		"XRP",
-	]);
+	const [cryptos, setCryptos] = useState<Coin[]>(["BTC", "ETH", "SOL", "XRP"]);
 	const [dateRanges, setDateRanges] = useState<DateRangeEntry[]>([
 		{ id: 1, range: [dayjs("2023-11-01"), dayjs("2024-4-30")] },
 		{ id: 2, range: [dayjs("2021-07-01"), dayjs("2021-12-31")] },
@@ -25,12 +32,7 @@ const App: React.FC = () => {
 		{ id: 4, range: [dayjs("2021-01-01"), dayjs("2021-06-30")] },
 	]);
 	const [rollingDays, setRollingDays] = useState<number>(8);
-	const [thresholds, setThresholds] = useState<Record<string, string>>({
-		// BTC: "133.75, 75.31, 51.93, 40.25, 28.56, 22.72, 16.87, 11.03, -12.35, -18.19, -29.88, -41.56, -53.25",
-		// ETH: "303.80, 253.32, 202.85, 152.37, 127.14, 76.66, 51.42, 41.33, 31.23, -24.29, -49.53",
-		// SOL: "125.43, 87.86, 57.80, 42.77, -17.34, -24.86, -39.89",
-		// XRP: "44.93, 28.37, -29.60, -37.89, -58.59",
-	});
+	const [thresholds, setThresholds] = useState<Record<string, string>>({});
 	const [results, setResults] = useState<any>(null);
 	const [loading, setLoading] = useState<boolean>(false);
 
@@ -53,6 +55,14 @@ const App: React.FC = () => {
 		setDateRanges(prev => prev.filter(entry => entry.id !== id));
 	};
 
+	const toggleCoin = (coin: Coin) => {
+		setCryptos(prev =>
+			prev.includes(coin) ? prev.filter(c => c !== coin) : [...prev, coin]
+		);
+	};
+
+	const [betType, setBetType] = useState<string>("multi-threshold");
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setLoading(true);
@@ -67,6 +77,7 @@ const App: React.FC = () => {
 				})),
 				days: rollingDays,
 				thresholds,
+				betType,
 			};
 
 			const response = await axios.post(
@@ -83,38 +94,51 @@ const App: React.FC = () => {
 	};
 
 	return (
-		<Container maxWidth="md">
-			<Typography variant="h4" gutterBottom mt={4}>
-				Crypto % Change Analyzer
-			</Typography>
+		<div>
+			<Header />
+			<Grid2 container spacing={2} padding={"0 1.5rem"}>
+				<Grid2 size={3} sx={{ minWidth: { lg: "532px" } }}>
+					<Paper elevation={3}>
+						<form onSubmit={handleSubmit}>
+							<CoinSelector selectedCoins={cryptos} onToggle={toggleCoin} />
+							<DateRangeSelector
+								dateRanges={dateRanges}
+								setDateRanges={setDateRanges}
+								handleRangeChange={handleRangeChange}
+								addDateRange={addDateRange}
+								removeDateRange={removeDateRange}
+							/>
+							<Divider />
+							<RollingDaysInput
+								rollingDays={rollingDays}
+								setRollingDays={setRollingDays}
+							/>
+							<Divider />
+							{/* Would use only if we dont automated the compairsion between prices changes of the current prices and polymarket offerings */}
+							{/* <CryptoThresholdInput
+								selectedCoins={cryptos}
+								thresholds={thresholds}
+								setThresholds={setThresholds}
+							/> */}
+							<PolymarketBetTypeSelector
+								selectedType={betType}
+								setSelectedType={setBetType}
+							/>
 
-			<Paper sx={{ p: 3, mb: 4 }} elevation={3}>
-				<form onSubmit={handleSubmit}>
-					<CryptoSelector selectedCryptos={cryptos} onChange={setCryptos} />
-					<DateRangeSelector
-						dateRanges={dateRanges}
-						setDateRanges={setDateRanges}
-						handleRangeChange={handleRangeChange}
-						addDateRange={addDateRange}
-						removeDateRange={removeDateRange}
-					/>
-					<RollingDaysInput
-						rollingDays={rollingDays}
-						setRollingDays={setRollingDays}
-					/>
-					<CryptoThresholdInput
-						selectedCoins={cryptos}
-						thresholds={thresholds}
-						setThresholds={setThresholds}
-					/>
-					<Box mt={2}>
-						<SubmitButton loading={loading} />
-					</Box>
-				</form>
-			</Paper>
-
-			{results && <ResultsTable results={results} />}
-		</Container>
+							<Box mt={2}>
+								<SubmitButton loading={loading} />
+							</Box>
+						</form>
+					</Paper>
+				</Grid2>
+				{/* Restuls Table When Connected to Actual Backend */}
+				{/* <Grid2 size={9}>{results && <ResultsTable results={results} />}</Grid2> */}
+				{/* Dummy Data ResultsTable */}
+				<Grid2 size={9}>
+					<ResultsTable results={results} />
+				</Grid2>
+			</Grid2>
+		</div>
 	);
 };
 

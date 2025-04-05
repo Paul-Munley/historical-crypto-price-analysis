@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, TextField, Typography, Divider } from "@mui/material";
+import LabeledInputWrapper from "./LabeledInputWrapper";
 
 interface CryptoThresholdInputProps {
 	selectedCoins: string[];
@@ -17,22 +18,20 @@ const CryptoThresholdInput: React.FC<CryptoThresholdInputProps> = ({
 	};
 
 	return (
-		<Box>
-			<Typography variant="h6" gutterBottom>
-				Thresholds by Crypto
+		<Box mt={3}>
+			<Typography variant="h6" mb={2}>
+				{"Enter % Changes (comma seperated)"}
 			</Typography>
 			{selectedCoins.map((coin, index) => (
-				<Box key={coin} mb={2}>
-					<Typography variant="subtitle1" sx={{ mb: 1 }}>
-						{coin.toUpperCase()}
-					</Typography>
-					<TextField
-						label="Thresholds (comma-separated %)"
-						value={thresholds[coin] || ""}
-						onChange={e => handleChange(coin, e.target.value)}
-						fullWidth
-					/>
-					{index < selectedCoins.length - 1 && <Divider sx={{ mt: 2 }} />}
+				<Box key={coin} mb={3}>
+					<LabeledInputWrapper label={coin.toUpperCase()}>
+						<TextField
+							placeholder="Comma-separated % thresholds"
+							value={thresholds[coin] || ""}
+							onChange={e => handleChange(coin, e.target.value)}
+							fullWidth
+						/>
+					</LabeledInputWrapper>
 				</Box>
 			))}
 		</Box>
