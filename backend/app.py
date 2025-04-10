@@ -1,77 +1,76 @@
+# app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from cryptocompare import fetch_prices
-from analysis import calculate_occurrences
-# from scraper import fetch_polymarket_odds  # ❌ Disabled for now
-import traceback
+from analysis import run_analysis
+from polymarket_api import fetch_polymarket_crypto_markets
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:5173"])
+CORS(app)
 
-@app.route('/analyze', methods=['POST'])
+@app.route("/analyze", methods=["POST"])
 def analyze():
-    try:
-        data = request.get_json()
+    data = request.get_json()
 
-        cryptos = data.get('cryptos', [])
-        date_ranges = data.get('dateRanges', [])
-        days = int(data.get('days', 0))
-        thresholds = data.get('thresholds', {})
+    cryptos = data.get("cryptos", [])
+    date_ranges = data.get("dateRanges", [])
+    rolling_days = data.get("days", 7)
+    bet_type = data.get("betType", "multi-threshold")
 
-        if not cryptos or not date_ranges or days == 0 or not thresholds:
-            return jsonify({"error": "Missing required data"}), 400
+    # Step 1: Run your occurrence % analysis
+    analysis_results = run_analysis(cryptos, date_ranges, rolling_days)
 
-        print("Incoming date ranges:", date_ranges)
+    # Step 2: Fetch Polymarket data
+    market_data = fetch_polymarket_crypto_markets()
+    print("[DEBUG] Polymarket Market Data:", market_data)
 
-        # polymarket_odds = fetch_polymarket_odds()  # ❌ Disabled for now
 
-        results = {}
+    # Step 3: Merge model with PM outcomes + calculate EV
+    combined_results = {}
+    for coin in cryptos:
+        occurrences = analysis_results.get(coin, {})
+        polymarket_markets = market_data.get(coin, [])
 
-        for coin in cryptos:
-            coin_thresholds = [
-                float(x.strip()) for x in thresholds.get(coin, "").split(",") if x.strip()
-            ]
-            if not coin_thresholds:
-                continue
 
-            all_prices = []
 
-            for date_range in date_ranges:
-                start = date_range.get("start")
-                end = date_range.get("end")
-                print(f"Date range: start={start}, end={end}")
-                if start and end:
-                    try:
-                        print(f"[DEBUG] Requesting {coin.upper()} from {start} to {end}")
-                        prices = fetch_prices(coin, "usd", start, end)
-                        print(f"[DEBUG] Fetched {len(prices)} prices. Sample: {prices[:5]}")
-                        all_prices += prices
-                    except Exception as e:
-                        print(f"Error fetching {coin} from {start} to {end}: {str(e)}")
+        results = []
+        for market in polymarket_markets:
+            for outcome in market["outcomes"]:
+                # You can match outcome labels to thresholds or price ranges
+                # For now we fake % change parsing and lookup (adjust as needed)
+                label = outcome["label"]
+                price = outcome["price"]
 
-            print(f"[DEBUG] {coin.lower()} prices length after appending: {len(all_prices)}")
+                # Example: pretend label = "$60,000 - $65,000", parse to 62.5k
+                try:
+                    parts = label.replace("$", "").replace(",", "").split(" - ")
+                    if len(parts) == 2:
+                        avg_price = (float(parts[0]) + float(parts[1])) / 2
+                    else:
+                        continue
+                    # Now compute % change vs. current/historic price range
+                    # Here we fake it — you'll want to calculate from actual price data
+                    fake_change = 50.0  # Placeholder
+                    occurred_pct = occurrences.get(fake_change, 0.0)
 
-            if all_prices:
-                print(f"Analyzing {len(all_prices)} prices for {coin}")
-                print(f"Thresholds: {coin_thresholds}, Days: {days}")
-                coin_result = calculate_occurrences(all_prices, coin_thresholds, days)
-                print(f"Coin result: {coin_result}")
+                    yes_odds = price
+                    no_odds = 1 - price
+                    yes_ev = occurred_pct * 100 - (yes_odds * 100)
+                    no_ev = (100 - occurred_pct) - (no_odds * 100)
 
-                # ✅ Simple version without odds
-                results[coin] = {
-                    t: {
-                        "occurred_percent": coin_result.get(t, 0),
-                        "model_probability": round(coin_result.get(t, 0), 2)
-                    }
-                    for t in coin_thresholds
-                }
+                    results.append({
+                        "change": fake_change,
+                        "occurred": occurred_pct,
+                        "yesOdds": yes_odds,
+                        "yesEV": yes_ev,
+                        "noOdds": no_odds,
+                        "noEV": no_ev
+                    })
+                except Exception:
+                    continue
 
-        return jsonify(results)
+        combined_results[coin] = results
 
-    except Exception as e:
-        print("Error in analyze route:", str(e))
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    return jsonify(combined_results)
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+if __name__ == "__main__":
+    app.run(port=5001, debug=True)

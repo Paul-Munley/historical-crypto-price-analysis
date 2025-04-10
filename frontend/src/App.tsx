@@ -132,11 +132,11 @@ const App: React.FC = () => {
 					</Paper>
 				</Grid2>
 				{/* Restuls Table When Connected to Actual Backend */}
-				{/* <Grid2 size={9}>{results && <ResultsTable results={results} />}</Grid2> */}
+				<Grid2 size={9}>{results && <ResultsTable results={results} />}</Grid2>
 				{/* Dummy Data ResultsTable */}
-				<Grid2 size={9}>
+				{/* <Grid2 size={9}>
 					<ResultsTable results={results} />
-				</Grid2>
+				</Grid2> */}
 			</Grid2>
 		</div>
 	);

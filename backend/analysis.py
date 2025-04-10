@@ -1,3 +1,4 @@
+from cryptocompare import fetch_prices  # Ensure this is at the top of the file
 from typing import Dict, List
 import statistics
 
@@ -54,3 +55,31 @@ def aggregate_results_per_coin(coin_results: List[Dict]) -> Dict:
         "per_coin": per_coin,
         "average": average
     }
+
+
+def run_analysis(cryptos: List[str], date_ranges: List[Dict], days: int) -> Dict[str, Dict[float, float]]:
+    """
+    Given a list of coins, date ranges, and rolling day window,
+    return a dict of % change occurrence rates for common thresholds.
+    """
+    thresholds = [-50, -40, -30, -20, -10, 10, 20, 30, 40, 50]  # Example default thresholds
+    results = {}
+
+    for coin in cryptos:
+        all_prices = []
+
+        for range_entry in date_ranges:
+            start = range_entry["start"]
+            end = range_entry["end"]
+
+            price_data = fetch_prices(coin, 'USD', start, end)
+            all_prices.extend(price_data)
+
+        if all_prices:
+            result = calculate_occurrences(all_prices, thresholds, days)
+            results[coin] = result
+        else:
+            results[coin] = {}
+
+    return results
+
