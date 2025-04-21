@@ -1,0 +1,1 @@
+GAMMA_URL = 'https://gamma-api.polymarket.com'
