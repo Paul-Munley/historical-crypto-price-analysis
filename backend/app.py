@@ -3,11 +3,19 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from analysis import run_analysis
 from polymarket_api import fetch_polymarket_crypto_markets
+
 from polycobra_backend.chatgpt_api.ask_question import ask_question
+from polycobra_backend.polymarket_api.event_slugs_by_tag_slug import event_slugs_by_tag_slug
 from polycobra_backend.constants.prompts import DOLLAR_VALUES_PARSE_PROMPT
 
 app = Flask(__name__)
 CORS(app)
+
+
+@app.route('/event-slugs', methods=["GET"])
+def event_slugs():
+    tag_slugs = request.args.get('tag_slug', None)
+    return event_slugs_by_tag_slug(tag_slugs)
 
 
 @app.route("/analyze", methods=["POST"])

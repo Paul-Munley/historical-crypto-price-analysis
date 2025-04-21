@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
 	Container,
 	Typography,
@@ -6,6 +6,9 @@ import {
 	Box,
 	Grid2,
 	Divider,
+	Select,
+	MenuItem,
+	InputLabel
 } from "@mui/material";
 import dayjs from "dayjs";
 import axios from "axios";
@@ -17,13 +20,65 @@ import { DateRangeEntry } from "./components/DateRangeSelector.types";
 import RollingDaysInput from "./components/RollingDaysInput";
 import SubmitButton from "./components/SubmitButton";
 import ResultsTable from "./components/ResultsTable";
-import CryptoThresholdInput from "./components/CryptoThresholdInput";
 import PolymarketBetTypeSelector from "./components/PolymarketBetTypeSelector";
-import { POLYMARKET_BET_TYPES } from "./constraints/betTypes";
 
 type Coin = "BTC" | "ETH" | "SOL" | "XRP";
 
+const slugsInitialValue = {
+	BTC: [],
+	ETH: [],
+	SOL: [],
+	XRP: []
+}
+
+const ABBREVIATIONS = {
+	BTC: 'bitcoin',
+	ETH: 'ethereum',
+	SOL: 'solana',
+	XRP: 'ripple'
+}
+
+const SlugSelector = ({ crypto, value, allSlugs, handleChange }: any) => {
+	return (
+		<>
+			<InputLabel id={`${crypto}-selector-label`}>
+				{crypto}
+			</InputLabel>
+			<Select value={value} labelId={`${crypto}-selector-label`} onChange={(event) => handleChange(event.target.value)}>
+				{allSlugs[crypto].map((slugElem: string) => (
+					<MenuItem value={slugElem}>{slugElem}</MenuItem>
+				))}
+			</Select>
+		</>
+	)
+}
+
 const App: React.FC = () => {
+	const [loadingSlugs, setLoadingSlugs] = useState<boolean>(true);
+	const [slugs, setSlugs] = useState(slugsInitialValue);
+	const [selectedBtc, setSelectedBtc] = useState('');
+	const [selectedEth, setSelectedEth] = useState('');
+	const [selectedSol, setSelectedSol] = useState('');
+	const [selectedXrp, setSelectedXrp] = useState('');
+	useEffect(() => {
+		const fetchSlugs = async () => {
+			setLoadingSlugs(true);
+
+			const newSlugsValue: any = {};
+			const slugKeys = Object.keys(slugsInitialValue);
+			for (let i = 0; i < slugKeys.length; i += 1) {
+				const slugKey = slugKeys[i];
+				const response = await axios.get(`http://localhost:5001/event-slugs?tag_slug=${ABBREVIATIONS[slugKey]}`)
+				newSlugsValue[slugKey] = response.data;	
+			}
+			
+			setSlugs(newSlugsValue);
+			setLoadingSlugs(false);
+		}
+
+		fetchSlugs();
+	}, [])
+
 	const [cryptos, setCryptos] = useState<Coin[]>(["BTC", "ETH", "SOL", "XRP"]);
 	const [dateRanges, setDateRanges] = useState<DateRangeEntry[]>([
 		{ id: 1, range: [dayjs("2023-11-01"), dayjs("2024-4-30")] },
@@ -101,6 +156,16 @@ const App: React.FC = () => {
 					<Paper elevation={3}>
 						<form onSubmit={handleSubmit}>
 							<CoinSelector selectedCoins={cryptos} onToggle={toggleCoin} />
+							<Box mb={2}>
+								{loadingSlugs ? 'Loading latest event slugs...' : (
+									<Box gap={2} display='flex' flexDirection='column'>
+										<SlugSelector crypto='BTC' value={selectedBtc} allSlugs={slugs} handleChange={setSelectedBtc}/>
+										<SlugSelector crypto='ETH' value={selectedEth} allSlugs={slugs} handleChange={setSelectedEth}/>
+										<SlugSelector crypto='SOL' value={selectedSol} allSlugs={slugs} handleChange={setSelectedSol}/>
+										<SlugSelector crypto='XRP' value={selectedXrp} allSlugs={slugs} handleChange={setSelectedXrp}/>
+									</Box>
+								)}
+							</Box>
 							<DateRangeSelector
 								dateRanges={dateRanges}
 								setDateRanges={setDateRanges}
