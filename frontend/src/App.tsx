@@ -20,7 +20,7 @@ import { DateRangeEntry } from "./components/DateRangeSelector.types";
 import RollingDaysInput from "./components/RollingDaysInput";
 import SubmitButton from "./components/SubmitButton";
 import ResultsTable from "./components/ResultsTable";
-import PolymarketBetTypeSelector from "./components/PolymarketBetTypeSelector";
+import MarketPicker from "./components/MarketPicker";
 
 type Coin = "BTC" | "ETH" | "SOL" | "XRP";
 
@@ -152,19 +152,12 @@ const App: React.FC = () => {
 		<div>
 			<Header />
 			<Grid2 container spacing={2} padding={"0 1.5rem"}>
-				<Grid2 size={3} sx={{ minWidth: { lg: "532px" } }}>
+				<Grid2 sx={{ width: '100%', minWidth: { lg: "532px" } }}>
 					<Paper elevation={3}>
 						<form onSubmit={handleSubmit}>
 							<CoinSelector selectedCoins={cryptos} onToggle={toggleCoin} />
 							<Box mb={2}>
-								{loadingSlugs ? 'Loading latest event slugs...' : (
-									<Box gap={2} display='flex' flexDirection='column'>
-										<SlugSelector crypto='BTC' value={selectedBtc} allSlugs={slugs} handleChange={setSelectedBtc}/>
-										<SlugSelector crypto='ETH' value={selectedEth} allSlugs={slugs} handleChange={setSelectedEth}/>
-										<SlugSelector crypto='SOL' value={selectedSol} allSlugs={slugs} handleChange={setSelectedSol}/>
-										<SlugSelector crypto='XRP' value={selectedXrp} allSlugs={slugs} handleChange={setSelectedXrp}/>
-									</Box>
-								)}
+								<MarketPicker />
 							</Box>
 							<DateRangeSelector
 								dateRanges={dateRanges}
@@ -185,11 +178,6 @@ const App: React.FC = () => {
 								thresholds={thresholds}
 								setThresholds={setThresholds}
 							/> */}
-							<PolymarketBetTypeSelector
-								selectedType={betType}
-								setSelectedType={setBetType}
-							/>
-
 							<Box mt={2}>
 								<SubmitButton loading={loading} />
 							</Box>

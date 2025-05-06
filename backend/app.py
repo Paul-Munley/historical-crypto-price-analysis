@@ -1,21 +1,53 @@
+from typing import List
 import json
-from flask import Flask, request, jsonify
+from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
-from analysis import run_analysis
-from polymarket_api import fetch_polymarket_crypto_markets
 
-from polycobra_backend.chatgpt_api.ask_question import ask_question
-from polycobra_backend.polymarket_api.event_slugs_by_tag_slug import event_slugs_by_tag_slug
-from polycobra_backend.constants.prompts import DOLLAR_VALUES_PARSE_PROMPT
+from polycobra_backend.constants.coins import Coin
+from polycobra_backend.services.event_service import Event, events_by_coin
+from polycobra_backend.services.price_service import get_ticker_prices
+from polycobra_backend.services.parse_service import extract_threshold_from_question
 
 app = Flask(__name__)
 CORS(app)
 
 
-@app.route('/event-slugs', methods=["GET"])
+@app.route('/events', methods=["GET"])
 def event_slugs():
-    tag_slugs = request.args.get('tag_slug', None)
-    return event_slugs_by_tag_slug(tag_slugs)
+    coin: Coin = Coin.from_label(request.args.get('coin', None))
+    events: List[Event] = events_by_coin(coin)
+
+    result = []
+    for event in events:
+        result.append(event.to_dict())
+
+    return Response(json.dumps(result, sort_keys=False), mimetype='application/json')
+
+
+@app.route('/ticker-prices', methods=["GET"])
+def ticker_prices():
+    tickers = request.args.get('tickers', None)
+
+    coins: List[Coin] = []
+    for ticker in tickers.split(','):
+        coins.append(Coin.from_label(ticker))
+
+    result = {}
+    for key, value in get_ticker_prices(coins).items():
+        result[key.label] = value
+
+    return result
+
+
+@app.route('/extract-threshold', methods=["GET"])
+def extract_threshold():
+    question = request.args.get('question', None)
+
+    computed_threshold = extract_threshold_from_question(question)
+
+    return jsonify({
+        'threshold': computed_threshold
+    })
 
 
 @app.route("/analyze", methods=["POST"])
@@ -30,69 +62,21 @@ def analyze():
     bet_type = data.get("betType", "multi-threshold")
 
     # Step 1: Run your occurrence % analysis
-    analysis_results = run_analysis(cryptos, date_ranges, rolling_days)
+    # analysis_results = run_analysis(cryptos, date_ranges, rolling_days)
 
     # Step 2: Fetch Polymarket data
-    market_data = fetch_polymarket_crypto_markets()
+    # market_data = fetch_polymarket_crypto_markets()
     print("[DEBUG] Polymarket Market Data:", market_data)
 
-    # Step 3: Merge model with PM outcomes + calculate EV
-    combined_results = {}
-    for coin in cryptos:
-        occurrences = analysis_results.get(coin, {})
-        polymarket_markets = market_data.get(coin, [])
-
-        results = []
-        for market in polymarket_markets:
-            print('Question: ', market.question)
-
-            # Example: pretend label = "$60,000 - $65,000", parse to 62.5k
-            response = ask_question(DOLLAR_VALUES_PARSE_PROMPT + market.question)
-
-            try:
-                price_list = json.loads(response)
-                print('     - resultant parsed list: ' + str(price_list))
-            except Exception as e:
-                print("Could not parse ChatGPT response: " + response)
-                continue
-
-            # for outcome in market["outcomes"]:
-            for label in ['Yes', 'No']:
-                # You can match outcome labels to thresholds or price ranges
-                # For now we fake % change parsing and lookup (adjust as needed)
-
-                if label == 'Yes':
-                    price = float(market.yes_price)
-                elif label == 'No':
-                    price = float(market.no_price)
-
-                if len(price_list) == 2:
-                    avg_price = (float(price_list[0]) + float(price_list[1])) / 2
-                else:
-                    continue
-
-                # Now compute % change vs. current/historic price range
-                # Here we fake it — you'll want to calculate from actual price data
-                fake_change = 50.0  # Placeholder
-                occurred_pct = occurrences.get(fake_change, 0.0)
-
-                yes_odds = price
-                no_odds = 1 - price
-                yes_ev = occurred_pct * 100 - (yes_odds * 100)
-                no_ev = (100 - occurred_pct) - (no_odds * 100)
-
-                results.append({
-                    "change": fake_change,
-                    "occurred": occurred_pct,
-                    "yesOdds": yes_odds,
-                    "yesEV": yes_ev,
-                    "noOdds": no_odds,
-                    "noEV": no_ev
-                })
-
-        combined_results[coin] = results
-
-    return jsonify(combined_results)
+                # results.append({
+                #     "change": fake_change,
+                #     "occurred": occurred_pct,
+                #     "yesOdds": yes_odds,
+                #     "yesEV": yes_ev,
+                #     "noOdds": no_odds,
+                #     "noEV": no_ev
+                # })
+    return {}
 
 
 if __name__ == "__main__":

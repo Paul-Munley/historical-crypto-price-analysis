@@ -1,5 +1,5 @@
-
 import requests
+
 
 def get_coinpaprika_id(symbol: str) -> str:
     symbol = symbol.lower()
@@ -14,6 +14,7 @@ def get_coinpaprika_id(symbol: str) -> str:
         "chainlink": "link-chainlink",
     }
     return known_ids.get(symbol, f"{symbol[:3]}-{symbol}")
+
 
 def fetch_prices(coin: str, currency: str, start_date: str, end_date: str) -> list[float]:
     coin_id = get_coinpaprika_id(coin)
