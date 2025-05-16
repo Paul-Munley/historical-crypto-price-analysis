@@ -50,29 +50,39 @@ def get_timestamp(date_string: str) -> int:
 
 
 def fetch_prices(symbol: str, start: str, end: str) -> List[float]:
-    # Normalize and map coin name to its ticker symbol
-    symbol = SYMBOL_MAP.get(symbol.lower(), symbol.upper())  # fallback to .upper()
+    # Coindesk format: "BTC-USD"
+    instrument = SYMBOL_MAP.get(symbol.lower(), f"{symbol.upper()}-USD")
+    market = "kraken"
 
     start_ts = get_timestamp(start)
     end_ts = get_timestamp(end)
 
-    limit = (end_ts - start_ts) // SECONDS_PER_DAY
-    if limit > 30:
-        raise ValueError("CoinMarketCap max limit is 30 days per request.")
+    # Calculate the number of days to fetch
+    num_days = (end_ts - start_ts) // 86400
+    if num_days > 30:
+        raise ValueError("Coindesk API limit is 30 days per request.")
 
-    url = f"{COIN_MARKET_CAP_ROOT}/v3/cryptocurrency/quotes/historical?symbol={symbol}&interval=1d&time_start={start}&time_end={end}&aux=price"
+    url = (
+        "https://data-api.coindesk.com/spot/v1/historical/days"
+        f"?market={market}"
+        f"&instrument={instrument}"
+        f"&limit={num_days}"
+        f"&aggregate=1"
+        f"&fill=true"
+        f"&apply_mapping=true"
+        f"&response_format=JSON"
+        f"&to_ts={end_ts}"
+    )
 
-    print(f"[DEBUG] Requesting {symbol} from {start} to {end} (limit={limit})")
+    print(f"[DEBUG] Requesting {symbol} from {start} to {end} (days={num_days})")
     print(f"[DEBUG] Full URL: {url}")
 
-    headers = {
-        'X-CMC_PRO_API_KEY': 'feb05f2a-3d5f-4db4-be8a-4ea89bd64521'
-    }
-    res = requests.get(url, headers=headers)
+    res = requests.get(url)
     if res.status_code != 200:
         raise Exception(f"Failed to fetch data: {res.text}")
 
-    prices = [x['quote']['USD']['price'] for x in res.json()['data'][symbol][0]['quotes']]
+    data = res.json().get("Data", [])
+    prices = [entry["CLOSE"] for entry in data if "CLOSE" in entry]
 
     print(f"[DEBUG] Fetched {len(prices)} prices. Sample: {prices[:5]}")
     return prices
