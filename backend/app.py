@@ -7,9 +7,16 @@ from polycobra_backend.constants.coins import Coin
 from polycobra_backend.services.event_service import Event, events_by_coin
 from polycobra_backend.services.price_service import get_ticker_prices
 from polycobra_backend.services.parse_service import extract_threshold_from_question
+from polycobra_backend.services.analysis_service import run_analysis
 
 app = Flask(__name__)
 CORS(app)
+
+
+class DateRange:
+    def __init__(self, start, end):
+        self.start: str = start
+        self.end: str = end
 
 
 @app.route('/events', methods=["GET"])
@@ -54,29 +61,12 @@ def extract_threshold():
 def analyze():
     data = request.get_json()
 
-    cryptos = data.get("cryptos", [])
-    print("[DEBUG] Cryptos: ", cryptos)
+    date_ranges = [DateRange(x['start'], x['end']) for x in data['dateRanges']]
+    thresholds_by_question: dict = data['thresholdsByQuestion']
+    event_to_analyze: str = data['eventToAnalyze']
+    days: int = data['days']
 
-    date_ranges = data.get("dateRanges", [])
-    rolling_days = data.get("days", 7)
-    bet_type = data.get("betType", "multi-threshold")
-
-    # Step 1: Run your occurrence % analysis
-    # analysis_results = run_analysis(cryptos, date_ranges, rolling_days)
-
-    # Step 2: Fetch Polymarket data
-    # market_data = fetch_polymarket_crypto_markets()
-    print("[DEBUG] Polymarket Market Data:", market_data)
-
-                # results.append({
-                #     "change": fake_change,
-                #     "occurred": occurred_pct,
-                #     "yesOdds": yes_odds,
-                #     "yesEV": yes_ev,
-                #     "noOdds": no_odds,
-                #     "noEV": no_ev
-                # })
-    return {}
+    return run_analysis(date_ranges, thresholds_by_question, event_to_analyze, days)
 
 
 if __name__ == "__main__":

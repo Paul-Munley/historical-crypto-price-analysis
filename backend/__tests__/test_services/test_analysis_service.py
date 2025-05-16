@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from polycobra_backend.services.analysis_service import calculate_occurrences, calculate_thresholds
+from polycobra_backend.services.analysis_service import calculate_occurrences, calculate_percent_changes
 
 
 class TestAnalysisService(TestCase):
@@ -23,27 +23,27 @@ class TestAnalysisService(TestCase):
         current = 100.0
         targets = [110.0]
         expected = [10.0]  # (110 - 100) / 100 * 100
-        result = calculate_thresholds(current, targets)
+        result = calculate_percent_changes(current, targets)
         self.assertEqual(result, expected)
 
     def test_multiple_target_prices(self):
         current = 100.0
         targets = [90.0, 100.0, 110.0]
         expected = [-10.0, 0.0, 10.0]
-        result = calculate_thresholds(current, targets)
+        result = calculate_percent_changes(current, targets)
         self.assertEqual(result, expected)
 
     def test_empty_target_list(self):
-        result = calculate_thresholds(100.0, [])
+        result = calculate_percent_changes(100.0, [])
         self.assertEqual(result, [])
 
     def test_high_precision(self):
         current = 99.99
         targets = [100.99]
         expected = [((100.99 - 99.99) / 99.99) * 100]
-        result = calculate_thresholds(current, targets)
+        result = calculate_percent_changes(current, targets)
         self.assertAlmostEqual(result[0], expected[0], places=5)
 
     def test_zero_current_price(self):
         with self.assertRaises(ZeroDivisionError):
-            calculate_thresholds(0.0, [100.0])
+            calculate_percent_changes(0.0, [100.0])

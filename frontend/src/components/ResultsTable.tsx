@@ -125,16 +125,17 @@ const StyledTableRow = styled(TableRow)<{ dimmed: boolean }>(({ dimmed }) => ({
 }));
 
 const ResultsTable: React.FC<Props> = ({ results }) => {
-	const allResults = results ?? dummyResults;
+	const allResults: any = results ?? [];
 	const selectedCoins = Object.keys(allResults) as Coin[];
 	const [activeCoin, setActiveCoin] = useState<Coin>(selectedCoins[0] ?? "BTC");
 
-	const rows = allResults[activeCoin] || [];
+	// const rows = allResults[activeCoin] || [];
+	const rows = allResults;
 	const sortedRows = [...rows].sort((a, b) => b.change - a.change);
 
 	return (
 		<Card sx={{ padding: "1rem 0" }}>
-			<Box
+			{/* <Box
 				display="flex"
 				gap={3}
 				mb={1}
@@ -158,7 +159,7 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 						</CoinTabButton>
 					);
 				})}
-			</Box>
+			</Box> */}
 
 			<TableContainer sx={{ background: "transparent" }}>
 				<Table>

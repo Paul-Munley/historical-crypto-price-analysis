@@ -1,98 +1,70 @@
 from typing import List, Dict
 import json
 
-from polycobra_backend.constants.coins import Coin
-from polycobra_backend.services.price_service import fetch_prices
+from polycobra_backend.services.price_service import fetch_prices, get_ticker_prices
+from polycobra_backend.services.event_service import Event, get_event
 
 
 class ExpectedValue:
     def __init__(self, occurred_percentage, polymarket_odds):
-        self.yes = round(((occurred_percentage * (1 / polymarket_odds)) - (1 - occurred_percentage)) * 100, 2)
-        self.no = round((((1 - occurred_percentage) * (1 / (1 - polymarket_odds))) - occurred_percentage) * 100, 2)
+        self.yesEv = round(((occurred_percentage * (1 / polymarket_odds)) - (1 - occurred_percentage)), 2)
+
+        if polymarket_odds < 1:
+            self.noEv = round((((1 - occurred_percentage) * (1 / (1 - polymarket_odds))) - occurred_percentage), 2)
+        else:
+            self.noEv = 0
+
+        self.yesOdds = polymarket_odds
+        self.noOdds = 1 - polymarket_odds
 
     def __str__(self):
-        return json.dumps({'yes': self.yes, 'no': self.no})
+        return json.dumps({'yes': self.yesEv, 'no': self.noEv})
 
 
-def run_analysis():
-    current_prices = {
-        Coin.BTC: 96715.01,
-        Coin.ETH: 1840.96,
-        Coin.SOL: 148.01,
-        Coin.XRP: 2.20
-    }
+def run_analysis(date_ranges: any,
+                 thresholds_by_question: any,
+                 event_to_analyze: any,
+                 rolling_days: any):
 
-    target_prices = {
-        Coin.BTC: [
-            97000.00,
-            96715.01,
-            99000.00,
-            100000.00,
-            110000.00,
-            120000.00,
-            130000.00
-        ],
-        Coin.ETH: [
-            2000.00,
-            3000.00,
-            4000.00,
-            5000.00,
-            6000.00,
-            7000.00,
-            8000.00
-        ],
-        Coin.SOL: [
-            150.00,
-            160.00,
-            170.00,
-            180.00,
-            190.00,
-            200.00,
-            210.00
-        ],
-        Coin.XRP: [
-            3.00,
-            4.00,
-            5.00,
-            6.00,
-            7.00,
-            8.00,
-            9.00
-        ]
-    }
+    event: Event = get_event(event_to_analyze)
 
-    polymarket_odds_by_coin = {
-        Coin.BTC: [
-            10.00,
-            9.00,
-            8.00,
-            7.00,
-            6.00,
-            5.00,
-            4.00
-        ]
-    }
+    historical_prices = []
+    for date_range in date_ranges:
+        historical_prices += fetch_prices(event.coin_tag.label,
+                                          date_range.start,
+                                          date_range.end)
 
-    rolling_days = 3
+    current_price = get_ticker_prices([event.coin_tag])[event.coin_tag]
 
-    historical_prices = fetch_prices('BTC', 'USD', '2024-01-01', '2024-02-01')
+    target_prices = []
+    polymarket_odds = []
+    for market in event.markets:
+        target_prices.append(thresholds_by_question[market.slug])
+        polymarket_odds.append(market.yes_price)
 
-    current_price = current_prices[Coin.BTC]
-    target_prices = target_prices[Coin.BTC]
-    polymarket_odds = polymarket_odds_by_coin[Coin.BTC]
-
-    thresholds = calculate_thresholds(current_price, target_prices)
+    percent_changes = calculate_percent_changes(current_price, target_prices)
 
     # "threshold satisfaction occurrence rates"
-    tsors = calculate_occurrences(historical_prices, thresholds, rolling_days)
+    tsors = calculate_occurrences(historical_prices, percent_changes, rolling_days)
 
-    tsors_list = [tsors[t] for t in thresholds]
+    tsors_list = [tsors[t] for t in percent_changes]
     expected_values = calculate_expected_values(tsors_list, polymarket_odds)
 
-    print()
+    result = []
+    for i, expected_value in enumerate(expected_values):
+        result.append({
+            'change': percent_changes[i],
+            'occurred': tsors_list[i],
+            'yesOdds': expected_value.yesOdds,
+            'noOdds': expected_value.noOdds,
+            'yesEV': expected_value.yesEv,
+            'noEV': expected_value.noEv
+        })
+
+    return result
 
 
-def calculate_thresholds(current_price: float, target_prices: List[float]):
+def calculate_percent_changes(current_price: float, target_prices: List[float]):
     thresholds = []
     for target_price in target_prices:
         threshold = ((target_price - current_price) / current_price) * 100

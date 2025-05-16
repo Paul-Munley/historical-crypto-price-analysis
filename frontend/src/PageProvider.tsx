@@ -8,7 +8,8 @@ export enum ACTIONS {
     SET_SOLANA_EVENTS,
     SET_RIPPLE_EVENTS,
 
-    UPDATE_THRESHOLDS
+    UPDATE_THRESHOLDS,
+    SET_EVENT_TO_ANALYZE
 }
 
 const pageReducer = (state: any, action: any) => {
@@ -46,6 +47,12 @@ const pageReducer = (state: any, action: any) => {
                 }
             }
 
+        case ACTIONS.SET_EVENT_TO_ANALYZE:
+            return {
+                ...state,
+                eventToAnalyze: action.payload
+            }
+
         default:
             return state
     }
@@ -57,7 +64,8 @@ const initialState = {
     solanaEvents: [],
     rippleEvents: [],
 
-    thresholdsByQuestion: {}
+    thresholdsByQuestion: {},
+    eventToAnalyze: ''
 }
 
 const PageProvider = ({ children }: any) => {

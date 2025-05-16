@@ -42,7 +42,6 @@ const MarketPicker = () => {
     const {state, dispatch} = useContext(PageContext);
 
     const [fetchingEvent, setFetchingEvent] = useState();
-    const [eventsUsing, setEventsUsing] = useState<any[]>([]);
 
     useEffect(() => {
         ['BTC', 'ETH', 'SOL', 'XRP'].forEach((coin: any) => {
@@ -77,17 +76,11 @@ const MarketPicker = () => {
         setFetchingEvent(undefined);
     }
 
-    const handleUse = (e: any, coin: string, eventSlug: string) => {
+    const handleEventSelection = (e: any, eventSlug: string) => {
         e.preventDefault();
         e.stopPropagation();
 
-        if (eventsUsing.map(eu => eu.slug).includes(eventSlug)) {
-            const newEventsUsing = [...eventsUsing].filter(elem => elem.slug !== eventSlug);
-            setEventsUsing(newEventsUsing);
-        } else {
-            const newEventsUsing = [...eventsUsing, {coin, slug: eventSlug}];
-            setEventsUsing(newEventsUsing);
-        }
+        dispatch({ type: PageActions.SET_EVENT_TO_ANALYZE, payload: eventSlug })
     }
 
     const eventsListForCoin = (eventCoin: string) => { 
@@ -107,12 +100,10 @@ const MarketPicker = () => {
                 break;
         }
 
-        const slugUsedForCurrentCoin = eventsUsing.filter(eu => eu.coin === eventCoin).map(eu => eu.slug).pop()
-
         return eventsToDisplay.map((event: any) => {
             const eventKey = `${eventCoin}-event-${event.slug}`;
 
-            const shouldDisableButton = !!slugUsedForCurrentCoin && slugUsedForCurrentCoin !== event.slug;
+            const selected = event.slug === state.eventToAnalyze;
 
             const eventLabel = (
                 <Box sx={{ minHeight: '35px' }} display='flex' justifyContent='space-between'>
@@ -128,11 +119,10 @@ const MarketPicker = () => {
                                     Extract Thresholds
                             </Button>
                             <Button
-                                disabled={shouldDisableButton}
-                                variant={eventsUsing.map(eu => eu.slug).includes(event.slug) ? 'outlined' : 'contained'}
+                                variant={selected ? 'contained' : 'outlined'}
                                 size='small'
-                                onClick={(e) => handleUse(e, eventCoin, event.slug)}>
-                                    {eventsUsing.map(eu => eu.slug).includes(event.slug) ? "Don't Use" : "Use"}
+                                onClick={(e) => handleEventSelection(e, event.slug)}>
+                                    {selected ? "Selected" : "Not Selected"}
                             </Button>
                         </Box>
                     )}
@@ -143,7 +133,6 @@ const MarketPicker = () => {
                 <TreeItem key={eventKey} itemId={eventKey} label={eventLabel}>
                     {event.markets.map((market: any) => {
                         const marketKey = `${eventCoin}-market-${market.slug}`;
-
                         const thresholdValue = state.thresholdsByQuestion[market.slug] || '';
 
                         const marketLabel = (
@@ -171,23 +160,18 @@ const MarketPicker = () => {
         }
     )};
 
-    const slugUsedForBTC = eventsUsing.filter(eu => eu.coin === 'BTC').map(eu => eu.slug).pop()
-    const slugUsedForETH = eventsUsing.filter(eu => eu.coin === 'ETH').map(eu => eu.slug).pop()
-    const slugUsedForSOL = eventsUsing.filter(eu => eu.coin === 'SOL').map(eu => eu.slug).pop()
-    const slugUsedForXRP = eventsUsing.filter(eu => eu.coin === 'XRP').map(eu => eu.slug).pop()
-
     return (
         <SimpleTreeView>
-            <TreeItem itemId='btc-events-list' label={`BTC Events ${!!slugUsedForBTC ? ` : [${slugUsedForBTC}]` : ''}`}>
+            <TreeItem itemId='btc-events-list' label='BTC Events'>
                 {eventsListForCoin('BTC')}
             </TreeItem>
-            <TreeItem itemId='eth-events-list' label={`ETH Events ${!!slugUsedForETH ? ` : [${slugUsedForETH}]` : ''}`}>
+            <TreeItem itemId='eth-events-list' label='ETH Events'>
                 {eventsListForCoin('ETH')}
             </TreeItem>
-            <TreeItem itemId='sol-events-list' label={`SOL Events ${!!slugUsedForSOL ? ` : [${slugUsedForSOL}]` : ''}`}>
+            <TreeItem itemId='sol-events-list' label='SOL Events'>
                 {eventsListForCoin('SOL')}
             </TreeItem>
-            <TreeItem itemId='xrp-events-list' label={`XRP Events ${!!slugUsedForXRP ? ` : [${slugUsedForXRP}]` : ''}`}>
+            <TreeItem itemId='xrp-events-list' label='XRP Events'>
                 {eventsListForCoin('XRP')}
             </TreeItem>
         </SimpleTreeView>

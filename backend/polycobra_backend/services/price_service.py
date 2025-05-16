@@ -2,8 +2,10 @@ from typing import List, Dict
 import requests
 from datetime import datetime
 
-from polycobra_backend.constants.third_party_endpoints import COINDESK_ROOT, CRYPTOCOMPARE_ROOT
+from polycobra_backend.constants.third_party_endpoints import COINDESK_ROOT, COIN_MARKET_CAP_ROOT
 from polycobra_backend.constants.coins import Coin
+
+CMC_KEY = 'feb05f2a-3d5f-4db4-be8a-4ea89bd64521'
 
 SECONDS_PER_DAY = 86400
 
@@ -47,7 +49,7 @@ def get_timestamp(date_string: str) -> int:
     return int(datetime.strptime(date_string, "%Y-%m-%d").timestamp())
 
 
-def fetch_prices(symbol: str, currency: str, start: str, end: str) -> List[float]:
+def fetch_prices(symbol: str, start: str, end: str) -> List[float]:
     # Normalize and map coin name to its ticker symbol
     symbol = SYMBOL_MAP.get(symbol.lower(), symbol.upper())  # fallback to .upper()
 
@@ -55,20 +57,22 @@ def fetch_prices(symbol: str, currency: str, start: str, end: str) -> List[float
     end_ts = get_timestamp(end)
 
     limit = (end_ts - start_ts) // SECONDS_PER_DAY
-    if limit > 2000:
-        raise ValueError("CryptoCompare max limit is 2000 days per request.")
+    if limit > 30:
+        raise ValueError("CoinMarketCap max limit is 30 days per request.")
 
-    url = f"https://{CRYPTOCOMPARE_ROOT}?fsym={symbol}&tsym={currency.upper()}&toTs={end_ts}&limit={limit}"
+    url = f"{COIN_MARKET_CAP_ROOT}/v3/cryptocurrency/quotes/historical?symbol={symbol}&interval=1d&time_start={start}&time_end={end}&aux=price"
 
     print(f"[DEBUG] Requesting {symbol} from {start} to {end} (limit={limit})")
     print(f"[DEBUG] Full URL: {url}")
 
-    res = requests.get(url)
+    headers = {
+        'X-CMC_PRO_API_KEY': 'feb05f2a-3d5f-4db4-be8a-4ea89bd64521'
+    }
+    res = requests.get(url, headers=headers)
     if res.status_code != 200:
         raise Exception(f"Failed to fetch data: {res.text}")
 
-    data = res.json().get("Data", {}).get("Data", [])
-    prices = [day["close"] for day in data if "close" in day]
+    prices = [x['quote']['USD']['price'] for x in res.json()['data'][symbol][0]['quotes']]
 
     print(f"[DEBUG] Fetched {len(prices)} prices. Sample: {prices[:5]}")
     return prices
