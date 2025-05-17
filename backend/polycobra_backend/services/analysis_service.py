@@ -53,6 +53,7 @@ def run_analysis(date_ranges: any,
     result = []
     for i, expected_value in enumerate(expected_values):
         result.append({
+            'threshold': target_prices[i],
             'change': percent_changes[i],
             'occurred': tsors_list[i],
             'yesOdds': expected_value.yesOdds,

@@ -165,6 +165,7 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 				<Table>
 					<TableHead>
 						<TableRow>
+							<TableCell>Threshold</TableCell>
 							<TableCell>% Change</TableCell>
 							<TableCell>% Occurred</TableCell>
 							<TableCell>Yes PM Odds</TableCell>
@@ -175,11 +176,12 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 					</TableHead>
 					<TableBody sx={{ padding: "0.75rem" }}>
 						{sortedRows.map((row, index) => {
-							const { change, occurred, yesOdds, yesEV, noOdds, noEV } = row;
+							const { threshold, change, occurred, yesOdds, yesEV, noOdds, noEV } = row;
 							const dimmed = occurred < 1 || occurred > 99;
 
 							return (
 								<StyledTableRow key={index} dimmed={dimmed}>
+									<TableCell>{threshold}</TableCell>
 									<TableCell sx={{ border: "none" }}>
 										{change.toFixed(2)}%
 									</TableCell>
