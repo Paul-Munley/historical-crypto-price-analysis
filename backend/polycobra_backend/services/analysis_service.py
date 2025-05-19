@@ -7,15 +7,22 @@ from polycobra_backend.services.event_service import Event, get_event
 
 class ExpectedValue:
     def __init__(self, occurred_percentage, polymarket_odds):
-        self.yesEv = round(((occurred_percentage * (1 / polymarket_odds)) - (1 - occurred_percentage)), 2)
-
-        if polymarket_odds < 1:
-            self.noEv = round((((1 - occurred_percentage) * (1 / (1 - polymarket_odds))) - occurred_percentage), 2)
-        else:
+        # Avoid divide-by-zero
+        if polymarket_odds in [0, 1]:
+            self.yesEv = 0
             self.noEv = 0
+        else:
+            # Calculate YES EV
+            yes_payout = (1 - polymarket_odds) / polymarket_odds
+            self.yesEv = round((occurred_percentage * yes_payout) - (1 - occurred_percentage), 2)
+
+            # Calculate NO EV
+            no_payout = polymarket_odds / (1 - polymarket_odds)
+            self.noEv = round(((1 - occurred_percentage) * no_payout) - occurred_percentage, 2)
 
         self.yesOdds = polymarket_odds
         self.noOdds = 1 - polymarket_odds
+
 
     def __str__(self):
         return json.dumps({'yes': self.yesEv, 'no': self.noEv})
@@ -39,7 +46,7 @@ def run_analysis(date_ranges: any,
     target_prices = []
     polymarket_odds = []
     for market in event.markets:
-        target_prices.append(thresholds_by_question[market.slug])
+        target_prices.append(float(thresholds_by_question[market.slug]))
         polymarket_odds.append(market.yes_price)
 
     percent_changes = calculate_percent_changes(current_price, target_prices)

@@ -8,7 +8,7 @@ class TestAnalysisService(TestCase):
     def test_1(self):
         prices = [10, 20, 30, 20, 40, 30, 40, 20, 10]
         thresholds = [100, 200, 300]
-        days = 3
+        days = 16
 
         occurrences = calculate_occurrences(prices, thresholds, days)
 
