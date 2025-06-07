@@ -19,7 +19,7 @@ const RollingDaysInput: React.FC<RollingDaysInputProps> = ({
 	return (
 		<Box mb={4} mt={3}>
 			<Typography variant="h6" mb={2}>
-				Select Date Ranges
+				Rolling Days
 			</Typography>
 			<TextField
 				type="number"

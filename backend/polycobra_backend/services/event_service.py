@@ -103,6 +103,7 @@ class Event:
         return event
 
 
+
 def events_by_coin(coin: Coin):
     url = f'{POLYMARKET_GAMMA_ROOT}/events?tag_slug={COIN_TO_SLUG[coin]}&closed=false&order=startDate&ascending=false'
     data_list = requests.get(url).json()

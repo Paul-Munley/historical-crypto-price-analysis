@@ -31,7 +31,8 @@ class ExpectedValue:
 def run_analysis(date_ranges: any,
                  thresholds_by_question: any,
                  event_to_analyze: any,
-                 rolling_days: any):
+                 rolling_days: any,
+                 momentum_confluence: dict = None):
 
     event: Event = get_event(event_to_analyze)
 
@@ -52,7 +53,7 @@ def run_analysis(date_ranges: any,
     percent_changes = calculate_percent_changes(current_price, target_prices)
 
     # "threshold satisfaction occurrence rates"
-    tsors = calculate_occurrences(historical_prices, percent_changes, rolling_days)
+    tsors = calculate_occurrences(historical_prices, percent_changes, rolling_days, momentum_confluence)
 
     tsors_list = [tsors[t] for t in percent_changes]
     expected_values = calculate_expected_values(tsors_list, polymarket_odds)
@@ -81,20 +82,36 @@ def calculate_percent_changes(current_price: float, target_prices: List[float]):
     return thresholds
 
 
-def calculate_occurrences(historical_prices: List[float], thresholds: List[float], rolling_days: int) -> Dict[float, float]:
+def calculate_occurrences(historical_prices: List[float],
+                          thresholds: List[float],
+                          rolling_days: int,
+                          momentum_confluence: dict = None) -> Dict[float, float]:
     total_windows = len(historical_prices) - rolling_days
     occurrences = {t: 0 for t in thresholds}
+
     for i in range(total_windows):
         start_price = historical_prices[i]
-
-        # Skip if start_price is zero to avoid divide-by-zero errors
         if start_price == 0:
             continue
+
+        # NEW: Check momentum confluence condition
+        if momentum_confluence:
+            lookback_days = momentum_confluence.get("lookbackDays", 0)
+            min_change = momentum_confluence.get("minPercentChange", 0)
+
+            prior_index = i - lookback_days
+            if prior_index >= 0:
+                prior_price = historical_prices[prior_index]
+                if prior_price > 0:
+                    prior_change = ((start_price - prior_price) / prior_price) * 100
+                    if prior_change < min_change:
+                        continue  # Don't count threshold as valid "hit"
+            else:
+                continue  # Not enough history to evaluate
 
         found = set()
         for j in range(1, rolling_days + 1):
             end_price = historical_prices[i + j]
-
             percent_change = ((end_price - start_price) / start_price) * 100
 
             for threshold in thresholds:
@@ -114,6 +131,7 @@ def calculate_occurrences(historical_prices: List[float], thresholds: List[float
         if total_windows > 0 else "N/A"
         for t in thresholds
     }
+
 
 
 def calculate_expected_values(occurred_percentages: List[float], polymarket_odds_list: List[float]):

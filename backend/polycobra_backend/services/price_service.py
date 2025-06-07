@@ -2,6 +2,7 @@ from typing import List, Dict
 import requests
 from datetime import datetime
 from polycobra_backend.constants.coins import Coin
+import os
 
 COINAPI_ROOT = "https://rest.coinapi.io/v1"
 COINAPI_KEY = "b9e2a6aa-f61b-4050-b3de-70c828e574e3"

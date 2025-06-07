@@ -8,6 +8,12 @@ from polycobra_backend.services.event_service import Event, events_by_coin
 from polycobra_backend.services.price_service import get_ticker_prices
 from polycobra_backend.services.parse_service import extract_threshold_from_question
 from polycobra_backend.services.analysis_service import run_analysis
+from polycobra_backend.services.m2_service import (fetch_m2_series, calculate_yoy_growth, generate_summary_string)
+from polycobra_backend.services.lunarcrush_sentiment import fetch_btc_social_score
+from polycobra_backend.services.dxy_service import (
+    fetch_dxy_series, calculate_yoy_growth as calc_dxy_yoy, generate_summary_string as dxy_summary
+)
+from polycobra_backend.services.ssr_service import calculate_ssr
 
 app = Flask(__name__)
 CORS(app)
@@ -65,8 +71,41 @@ def analyze():
     thresholds_by_question: dict = data['thresholdsByQuestion']
     event_to_analyze: str = data['eventToAnalyze']
     days: int = data['days']
+    momentum_confluence: dict = data.get('momentumConfluence', None)
 
-    return run_analysis(date_ranges, thresholds_by_question, event_to_analyze, days)
+    return run_analysis(date_ranges, thresholds_by_question, event_to_analyze, days, momentum_confluence)
+
+# Dashboard
+
+@app.route("/api/m2", methods=["GET"])
+def get_m2_data():
+    raw_data = fetch_m2_series()
+    yoy_data = calculate_yoy_growth(raw_data)
+    summary = generate_summary_string(yoy_data)
+    return {
+        "data": yoy_data,
+        "summary": summary
+    }
+
+@app.route("/api/btc-social-score", methods=["GET"])
+def get_btc_social_score():
+    days = int(request.args.get("days", 30))
+    data = fetch_btc_social_score(days=days)
+    return jsonify(data)
+
+@app.route("/api/dxy", methods=["GET"])
+def get_dxy_data():
+    raw_data = fetch_dxy_series()
+    yoy_data = calc_dxy_yoy(raw_data)
+    summary = dxy_summary(yoy_data)
+    return {
+        "data": yoy_data,
+        "summary": summary
+    }
+
+@app.route("/api/ssr", methods=["GET"])
+def get_ssr():
+    return calculate_ssr()
 
 
 if __name__ == "__main__":

@@ -1,11 +1,32 @@
 :root {
-	font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+	/* Dark Theme (default) */
+	--color-bg: var(--color-bg-dark);
+	--color-paper: var(--color-paper-dark);
+	--color-primary: var(--color-primary-dark);
+	--color-text: var(--color-text-dark);
+
+	/* Dark Theme Values */
+	--color-bg-dark: #040c17;
+	--color-secondary-bg-dark: #00132b;
+	--color-paper-dark: #00060d;
+	--color-primary-dark: #1b61c4;
+	--color-text-dark: #ffffff;
+	--color-text-secondary-dark: #rgba(255, 255, 255, 0.7);
+
+	/* Light Theme Values */
+	--color-bg-light: #f0e8db;
+	--color-paper-light: #faf2e6;
+	--color-primary-light: #1b61c4;
+	--color-text-light: #031a37;
+	--color-text-secondary-dark: rgba(3, 26, 55, 0.8);
+
+	font-family: "Figtree", sans-serif;
 	line-height: 1.5;
 	font-weight: 400;
 
 	color-scheme: light dark;
-	color: rgba(255, 255, 255, 0.87);
-	background-color: #242424;
+	color: var(--color-text);
+	background-color: var(--color-bg);
 
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
@@ -20,11 +41,11 @@
 
 a {
 	font-weight: 500;
-	color: #646cff;
+	color: var(--color-primary);
 	text-decoration: inherit;
 }
 a:hover {
-	color: #535bf2;
+	color: var(--color-primary);
 }
 
 html,
@@ -43,6 +64,16 @@ body {
 h1 {
 	font-size: 3.2em;
 	line-height: 1.1;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	margin-top: 0;
+	margin-bottom: 0;
 }
 
 button {
