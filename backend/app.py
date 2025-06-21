@@ -2,9 +2,8 @@ from typing import List
 import json
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
-
 from polycobra_backend.constants.coins import Coin
-from polycobra_backend.services.event_service import Event, events_by_coin
+from polycobra_backend.services.event_service import events_by_coin, get_fallback_events_for_coin
 from polycobra_backend.services.price_service import get_ticker_prices
 from polycobra_backend.services.parse_service import extract_threshold_from_question
 from polycobra_backend.services.analysis_service import run_analysis
@@ -28,12 +27,22 @@ class DateRange:
 @app.route('/events', methods=["GET"])
 def event_slugs():
     coin: Coin = Coin.from_label(request.args.get('coin', None))
-    events: List[Event] = events_by_coin(coin)
+    
+    # Primary method
+    events = events_by_coin(coin)
 
-    result = []
+    # Add fallback events
+    events += get_fallback_events_for_coin(coin)
+
+    # Deduplicate by slug
+    seen = set()
+    deduped_events = []
     for event in events:
-        result.append(event.to_dict())
+        if event.slug not in seen:
+            seen.add(event.slug)
+            deduped_events.append(event)
 
+    result = [event.to_dict() for event in deduped_events]
     return Response(json.dumps(result, sort_keys=False), mimetype='application/json')
 
 

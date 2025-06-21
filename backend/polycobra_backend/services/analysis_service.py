@@ -2,7 +2,7 @@ from typing import List, Dict
 import json
 
 from polycobra_backend.services.price_service import fetch_prices, get_ticker_prices
-from polycobra_backend.services.event_service import Event, get_event
+from polycobra_backend.services.event_service import Event, safe_get_event_by_slug
 
 
 class ExpectedValue:
@@ -34,7 +34,7 @@ def run_analysis(date_ranges: any,
                  rolling_days: any,
                  momentum_confluence: dict = None):
 
-    event: Event = get_event(event_to_analyze)
+    event: Event = safe_get_event_by_slug(event_to_analyze)
 
     historical_prices = []
     for date_range in date_ranges:

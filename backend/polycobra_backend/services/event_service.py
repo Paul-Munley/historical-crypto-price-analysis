@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from typing import List, Optional
 import requests
 import json
@@ -102,8 +103,6 @@ class Event:
 
         return event
 
-
-
 def events_by_coin(coin: Coin):
     url = f'{POLYMARKET_GAMMA_ROOT}/events?tag_slug={COIN_TO_SLUG[coin]}&closed=false&order=startDate&ascending=false'
     data_list = requests.get(url).json()
@@ -119,12 +118,57 @@ def events_by_coin(coin: Coin):
     return events
 
 
-def get_event(event_slug: str):
-    url = f'{POLYMARKET_GAMMA_ROOT}/events?slug={event_slug}'
-    event_objects_list = requests.get(url).json()
-    assert len(event_objects_list) == 1
+def safe_get_event_by_slug(slug: str):
+    url = f"{POLYMARKET_GAMMA_ROOT}/events?slug={slug}"
+    try:
+        response = requests.get(url)
+        event_objects = response.json()
+        if isinstance(event_objects, list) and len(event_objects) == 1:
+            return Event.parse(event_objects[0])
+    except Exception as e:
+        print(f"❌ Failed to fetch event for slug '{slug}': {e}")
+    return None
 
-    return Event.parse(event_objects_list[0])
+def get_multiple_events_by_slugs(slugs: List[str]):
+    events = []
+    for slug in slugs:
+        event = safe_get_event_by_slug(slug)
+        if event:
+            events.append(event)
+    return events
+
+def get_upcoming_fridays(n: int = 2):
+    today = datetime.utcnow()
+    weekday = today.weekday()  # Monday=0, Friday=4, Sunday=6
+
+    # Days until the next Friday
+    days_ahead = (4 - weekday) % 7
+    if days_ahead == 0:
+        days_ahead = 7  # Always move forward, even if today is Friday
+
+    base_friday = today + timedelta(days=days_ahead)
+
+    fridays = [base_friday + timedelta(days=7 * i) for i in range(n)]
+    return fridays
+
+def generate_weekly_btc_slugs(n: int = 2):
+    fridays = get_upcoming_fridays(n)
+    slugs = []
+
+    for friday in fridays:
+        slug = f"bitcoin-price-on-{friday.strftime('%B').lower()}-{friday.day}"
+        slug = slug.replace(" ", "-")
+        slugs.append(slug)
+
+    return slugs
+
+# Unified fallback method
+def get_fallback_events_for_coin(coin: Coin) -> List:
+    if coin == Coin.BTC:
+        slugs = generate_weekly_btc_slugs()
+        return get_multiple_events_by_slugs(slugs)
+    return []
+
 
 
 if __name__ == '__main__':
