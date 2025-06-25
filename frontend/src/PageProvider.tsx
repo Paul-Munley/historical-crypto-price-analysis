@@ -3,10 +3,7 @@ import { useMemo, useReducer } from 'react';
 import PageContext from './PageContext';
 
 export enum ACTIONS {
-    SET_BITCOIN_EVENTS,
-    SET_ETHEREUM_EVENTS,
-    SET_SOLANA_EVENTS,
-    SET_RIPPLE_EVENTS,
+    ADD_EVENT,
 
     UPDATE_THRESHOLDS,
     SET_EVENT_TO_ANALYZE
@@ -14,28 +11,10 @@ export enum ACTIONS {
 
 const pageReducer = (state: any, action: any) => {
     switch (action.type) {
-        case ACTIONS.SET_BITCOIN_EVENTS:
+        case ACTIONS.ADD_EVENT:
             return {
                 ...state,
-                bitcoinEvents: action.payload
-            }
-
-        case ACTIONS.SET_ETHEREUM_EVENTS:
-            return {
-                ...state,
-                ethereumEvents: action.payload
-            }
-
-        case ACTIONS.SET_SOLANA_EVENTS:
-            return {
-                ...state,
-                solanaEvents: action.payload
-            }
-
-        case ACTIONS.SET_RIPPLE_EVENTS:
-            return {
-                ...state,
-                rippleEvents: action.payload
+                allEvents: [...state.allEvents, action.payload]
             }
 
         case ACTIONS.UPDATE_THRESHOLDS:
@@ -59,10 +38,7 @@ const pageReducer = (state: any, action: any) => {
 }
 
 const initialState = {
-    bitcoinEvents: [],
-    ethereumEvents: [],
-    solanaEvents: [],
-    rippleEvents: [],
+    allEvents: [],
 
     thresholdsByQuestion: {},
     eventToAnalyze: ''

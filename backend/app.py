@@ -3,7 +3,7 @@ import json
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 from polycobra_backend.constants.coins import Coin
-from polycobra_backend.services.event_service import events_by_coin, get_fallback_events_for_coin
+from polycobra_backend.services.event_service import events_by_coin, get_fallback_events_for_coin, safe_get_event_by_slug
 from polycobra_backend.services.price_service import get_ticker_prices
 from polycobra_backend.services.parse_service import extract_threshold_from_question
 from polycobra_backend.services.analysis_service import run_analysis
@@ -27,22 +27,35 @@ class DateRange:
 @app.route('/events', methods=["GET"])
 def event_slugs():
     coin: Coin = Coin.from_label(request.args.get('coin', None))
-    
-    # Primary method
-    events = events_by_coin(coin)
+    slug: str = request.args.get('slug', None)
 
-    # Add fallback events
-    events += get_fallback_events_for_coin(coin)
+    if coin and slug:
+        raise ValueError("Cannot specify both slug and coin")
 
-    # Deduplicate by slug
-    seen = set()
-    deduped_events = []
-    for event in events:
-        if event.slug not in seen:
-            seen.add(event.slug)
-            deduped_events.append(event)
+    if coin:
+        # Primary method
+        events = events_by_coin(coin)
 
-    result = [event.to_dict() for event in deduped_events]
+        # Add fallback events
+        events += get_fallback_events_for_coin(coin)
+
+        # Deduplicate by slug
+        seen = set()
+        deduped_events = []
+        for event in events:
+            if event.slug not in seen:
+                seen.add(event.slug)
+                deduped_events.append(event)
+
+        result = [event.to_dict() for event in deduped_events]
+
+    elif slug:
+        event = safe_get_event_by_slug(slug)
+        result = [event.to_dict()]
+
+    else:
+        raise ValueError("Must specify either slug or coin")
+
     return Response(json.dumps(result, sort_keys=False), mimetype='application/json')
 
 

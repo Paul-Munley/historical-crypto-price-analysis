@@ -12,6 +12,9 @@ class Coin(Enum):
 
     @classmethod
     def from_label(cls, label: str):
+        if label is None:
+            return None
+
         for role in cls:
             if role.label == label:
                 return role

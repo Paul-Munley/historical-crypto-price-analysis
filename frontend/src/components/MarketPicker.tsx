@@ -12,12 +12,6 @@ import { ACTIONS as PageActions } from "../PageProvider";
 
 type Coin = "BTC" | "ETH" | "SOL" | "XRP";
 
-const fetchEventsForCoin = async (coin: Coin) => {
-	const url = `http://localhost:5001/events?coin=${coin}`;
-	const response = await fetch(url);
-	return await response.json();
-};
-
 const fetchThresholdsForEvent = async (event: any) => {
 	const promises: any[] = [];
 	event.markets.forEach((market: any) => {
@@ -45,29 +39,6 @@ const MarketPicker = () => {
 	const { state, dispatch } = useContext(PageContext);
 
 	const [fetchingEvent, setFetchingEvent] = useState();
-
-	useEffect(() => {
-		["BTC", "ETH", "SOL", "XRP"].forEach((coin: any) => {
-			fetchEventsForCoin(coin).then(data => {
-				let actionType;
-				switch (coin) {
-					case "BTC":
-						actionType = PageActions.SET_BITCOIN_EVENTS;
-						break;
-					case "ETH":
-						actionType = PageActions.SET_ETHEREUM_EVENTS;
-						break;
-					case "SOL":
-						actionType = PageActions.SET_SOLANA_EVENTS;
-						break;
-					case "XRP":
-						actionType = PageActions.SET_RIPPLE_EVENTS;
-						break;
-				}
-				dispatch({ type: actionType, payload: data });
-			});
-		});
-	}, []);
 
 	const handleThresholdsRequest = async (e: any, event: any) => {
 		e.preventDefault();
@@ -181,9 +152,12 @@ const MarketPicker = () => {
 	};
 
 	return (
-		<SimpleTreeView>
+		<SimpleTreeView defaultExpandedItems={['btc-events-list']}>
 			<TreeItem itemId="btc-events-list" label="BTC Events">
 				{eventsListForCoin("BTC")}
+				<Button size="small" variant="outlined">
+					Add Event
+				</Button>
 			</TreeItem>
 			<TreeItem itemId="eth-events-list" label="ETH Events">
 				{eventsListForCoin("ETH")}

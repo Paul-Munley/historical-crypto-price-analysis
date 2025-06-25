@@ -1,10 +1,10 @@
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 import requests
 from datetime import datetime
 from typing import List, Dict
 
-load_dotenv()
+# load_dotenv()
 FRED_STL_API_KEY = os.getenv("FRED_STL_API_KEY")
 FRED_API_BASE = "https://api.stlouisfed.org/fred"
 
