@@ -47,7 +47,7 @@ const MarketPicker = () => {
 	const [fetchingEvent, setFetchingEvent] = useState();
 
 	useEffect(() => {
-		["BTC", "ETH", "SOL", "XRP"].forEach((coin: any) => {
+		["ETH"].forEach((coin: any) => {
 			fetchEventsForCoin(coin).then(data => {
 				let actionType;
 				switch (coin) {

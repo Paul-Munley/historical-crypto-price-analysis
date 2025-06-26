@@ -104,18 +104,23 @@ class Event:
         return event
 
 def events_by_coin(coin: Coin):
-    url = f'{POLYMARKET_GAMMA_ROOT}/events?tag_slug={COIN_TO_SLUG[coin]}&closed=false&order=startDate&ascending=false'
-    data_list = requests.get(url).json()
-    events = []
-    for event_object in data_list:
-        try:
-            event = Event.parse(event_object)
-        except UnsupportedOutcomeException:
-            continue
+    aggregated_events_list = []
+    for offset in range(0, 100):
 
-        events.append(event)
+        url = f'{POLYMARKET_GAMMA_ROOT}/events?tag_slug={COIN_TO_SLUG[coin]}&closed=false&order=startDate&ascending=false&offset={offset}'
+        data_list = requests.get(url).json()
+        events = []
+        for event_object in data_list:
+            print(event_object)
+            try:
+                event = Event.parse(event_object)
+            except UnsupportedOutcomeException:
+                continue
 
-    return events
+            events.append(event)
+        aggregated_events_list += events
+
+    return aggregated_events_list
 
 
 def safe_get_event_by_slug(slug: str):
