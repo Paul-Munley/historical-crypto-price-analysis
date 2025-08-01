@@ -17,8 +17,9 @@ import { DateRangeEntry } from "../components/DateRangeSelector.types";
 import RollingDaysInput from "../components/RollingDaysInput";
 import SubmitButton from "../components/SubmitButton";
 import ResultsTable from "../components/ResultsTable";
-import MarketPicker from "../components/MarketPicker";
+import MarketPicker from "../components/MarketPickerV2";
 import PageContext from "../PageContext";
+import EventSlugSelectorModal from "../components/EventSlugSelectorModal";
 
 const Analyze = () => {
 	const { state } = useContext(PageContext);
@@ -51,6 +52,7 @@ const Analyze = () => {
 	const [minPercentChange, setMinPercentChange] = useState<number>(6.56);
 	const [results, setResults] = useState<any>(null);
 	const [loading, setLoading] = useState<boolean>(false);
+	const [eventSlugSelectorOpen, setEventSlugSelectorOpen] = useState(true);
 
 	const handleRangeChange = (
 		id: number,
@@ -114,10 +116,11 @@ const Analyze = () => {
 			sx={{ flexWrap: "nowrap" }}
 		>
 			<Grid2 sx={{ width: "100%", minWidth: { lg: "532px" }, flex: 1 }}>
+				<EventSlugSelectorModal open={eventSlugSelectorOpen} onClose={() => setEventSlugSelectorOpen(false)} />
 				<Paper elevation={3}>
 					<form onSubmit={handleSubmit}>
 						<Box mb={2}>
-							<MarketPicker />
+							<MarketPicker onAdd={() => setEventSlugSelectorOpen(true)}/>
 						</Box>
 						<DateRangeSelector
 							dateRanges={dateRanges}
