@@ -1,6 +1,6 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useContext } from "react";
 
-import { Box, Button, TextField } from "@mui/material";
+import { Box, Button } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import { ScaleLoader } from "react-spinners";
@@ -35,7 +35,7 @@ const fetchThresholdsForEvent = async (event: any) => {
 	return result;
 };
 
-const MarketPickerV2 = ({onAdd}: any) => {
+const MarketPickerV2 = ({ onAdd }: any) => {
 	const { state, dispatch } = useContext(PageContext);
 
 	const [fetchingEvent, setFetchingEvent] = useState();
@@ -53,94 +53,97 @@ const MarketPickerV2 = ({onAdd}: any) => {
 		setFetchingEvent(undefined);
 	};
 
-	const handleEventSelection = (e: any, eventSlug: string) => {
+	const handleEventSelection = (e: any, event: any) => {
 		e.preventDefault();
 		e.stopPropagation();
 
-		dispatch({ type: PageActions.SET_EVENT_TO_ANALYZE, payload: eventSlug });
+		// ✅ Now dispatching the full event object, not just the slug
+		dispatch({ type: PageActions.SET_EVENT_TO_ANALYZE, payload: event });
 	};
 
 	const allEvents = state.allEvents;
 
 	return (
-        <Box>
-            <SimpleTreeView defaultExpandedItems={allEvents.map(e => `event-${e.slug}`)}>
-                {allEvents.map((event: any) => {
-                    const selected = event.slug === state.eventToAnalyze;
-                    const eventKey = `event-${event.slug}`;
+		<Box>
+			<SimpleTreeView
+				defaultExpandedItems={allEvents.map(e => `event-${e.slug}`)}
+			>
+				{allEvents.map((event: any) => {
+					const selected = event.slug === state.eventToAnalyze?.slug;
+					const eventKey = `event-${event.slug}`;
 
-                    const eventLabel = (
-                        <Box
-                            sx={{ minHeight: "35px" }}
-                            display="flex"
-                            justifyContent="space-between"
-                        >
-                            <Box>{`🗓 ${event.title}`}</Box>
-                            {fetchingEvent === event.slug ? (
-                                <ScaleLoader height={20} color="white" />
-                            ) : (
-                                <Box display="flex" gap={1}>
-                                    <Button
-                                        size="small"
-                                        sx={{ flexShrink: 1 }}
-                                        startIcon={<AutoAwesomeIcon />}
-                                        onClick={e => handleThresholdsRequest(e, event)}
-                                    ></Button>
-                                    <Button
-                                        variant={selected ? "contained" : "outlined"}
-                                        size="small"
-                                        sx={{ flexGrow: 1 }}
-                                        onClick={e => handleEventSelection(e, event.slug)}
-                                    >
-                                        {selected ? "Selected" : "Not Selected"}
-                                    </Button>
-                                </Box>
-                            )}
-                        </Box>
-                    );
+					const eventLabel = (
+						<Box
+							sx={{ minHeight: "35px" }}
+							display="flex"
+							justifyContent="space-between"
+						>
+							<Box>{`🗓 ${event.title}`}</Box>
+							{fetchingEvent === event.slug ? (
+								<ScaleLoader height={20} color="white" />
+							) : (
+								<Box display="flex" gap={1}>
+									<Button
+										size="small"
+										sx={{ flexShrink: 1 }}
+										startIcon={<AutoAwesomeIcon />}
+										onClick={e => handleThresholdsRequest(e, event)}
+									></Button>
+									<Button
+										variant={selected ? "contained" : "outlined"}
+										size="small"
+										sx={{ flexGrow: 1 }}
+										onClick={e => handleEventSelection(e, event)}
+									>
+										{selected ? "Selected" : "Not Selected"}
+									</Button>
+								</Box>
+							)}
+						</Box>
+					);
 
-                    return (
-                        <TreeItem key={eventKey} itemId={eventKey} label={eventLabel}>
-                            {event.markets.map((market: any) => {
-                                const marketKey = `market-${market.slug}`;
-                                const thresholdValue =
-                                    state.thresholdsByQuestion[market.slug] || "";
+					return (
+						<TreeItem key={eventKey} itemId={eventKey} label={eventLabel}>
+							{event.markets.map((market: any) => {
+								const marketKey = `market-${market.slug}`;
+								const thresholdValue =
+									state.thresholdsByQuestion[market.slug] || "";
 
-                                const marketLabel = (
-                                    <Box display="flex" justifyContent="space-between">
-                                        <Box>{`📈 ${market.question}`}</Box>
-                                        <input
-                                            value={thresholdValue}
-                                            onClick={e => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                            }}
-                                            onChange={e => {
-                                                dispatch({
-                                                    type: PageActions.UPDATE_THRESHOLDS,
-                                                    payload: { [market.slug]: e.target.value },
-                                                });
-                                            }}
-                                        />
-                                    </Box>
-                                );
+								const marketLabel = (
+									<Box display="flex" justifyContent="space-between">
+										<Box>{`📈 ${market.question}`}</Box>
+										<input
+											value={thresholdValue}
+											onClick={e => {
+												e.preventDefault();
+												e.stopPropagation();
+											}}
+											onChange={e => {
+												dispatch({
+													type: PageActions.UPDATE_THRESHOLDS,
+													payload: { [market.slug]: e.target.value },
+												});
+											}}
+										/>
+									</Box>
+								);
 
-                                return (
-                                    <TreeItem
-                                        key={marketKey}
-                                        itemId={marketKey}
-                                        label={marketLabel}
-                                    />
-                                );
-                            })}
-                        </TreeItem>
-                    );
-                })}
-            </SimpleTreeView>
-            <Button size="small" variant="outlined" onClick={onAdd}>
-                Add Event
-            </Button>
-        </Box>
+								return (
+									<TreeItem
+										key={marketKey}
+										itemId={marketKey}
+										label={marketLabel}
+									/>
+								);
+							})}
+						</TreeItem>
+					);
+				})}
+			</SimpleTreeView>
+			<Button size="small" variant="outlined" onClick={onAdd}>
+				Add Event
+			</Button>
+		</Box>
 	);
 };
 

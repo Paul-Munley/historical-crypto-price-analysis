@@ -20,12 +20,21 @@ class UnsupportedOutcomeException(Exception):
 
 class Market:
 
-    def __init__(self, identifier: str, question: str, slug: str, yes_price: float, no_price: float):
+    def __init__(self,
+                 identifier: str,
+                 question: str,
+                 slug: str,
+                 yes_price: float,
+                 no_price: float,
+                 yes_label: str = 'Yes',
+                 no_label: str = 'No'):
         self.id: str = identifier
         self.question: str = question
         self.slug: str = slug
         self.yes_price: float = yes_price
         self.no_price: float = no_price
+        self.yes_label: str = yes_label
+        self.no_label: str = no_label
 
     def to_dict(self):
         return {
@@ -33,12 +42,17 @@ class Market:
             'question': self.question,
             'slug': self.slug,
             'yes_price': self.yes_price,
-            'no_price': self.no_price
+            'no_price': self.no_price,
+            'yes_label': self.yes_label,
+            'no_label': self.no_label,
         }
 
     @staticmethod
     def parse(market_object: dict) -> "Market":
         outcomes = json.loads(market_object['outcomes'])
+
+        if len(outcomes) != 2:
+            raise UnsupportedOutcomeException()
 
         yes_index = None
         no_index = None
@@ -47,9 +61,14 @@ class Market:
                 yes_index = i
             elif outcome_name == 'No':
                 no_index = i
+            elif outcome_name == 'Up':
+                yes_index = i
+            elif outcome_name == 'Down':
+                no_index = i
 
         if (yes_index is None) or (no_index is None):
-            raise UnsupportedOutcomeException()
+            yes_index = 0
+            no_index = 1
 
         assert yes_index != no_index
 
@@ -61,7 +80,9 @@ class Market:
                       market_object['question'],
                       market_object['slug'],
                       yes_price,
-                      no_price)
+                      no_price,
+                      outcomes[yes_index],
+                      outcomes[no_index])
 
 
 class Event:
@@ -95,11 +116,16 @@ class Event:
         for market_object in event_object['markets']:
             event.add_market(Market.parse(market_object))
 
-        for tag_object in event_object['tags']:
+        Event._assign_coin_tag(event, event_object.get('tags', []))
+        return event
+
+    @staticmethod
+    def _assign_coin_tag(event: "Event", tag_objects: list[dict]):
+        for tag_object in tag_objects:
             for key, value in COIN_TO_SLUG.items():
                 if tag_object['slug'] == value:
                     event.coin_tag = key
-                    return event
+                    return
 
         return event
 
@@ -132,6 +158,29 @@ def safe_get_event_by_slug(slug: str):
             return Event.parse(event_objects[0])
     except Exception as e:
         print(f"❌ Failed to fetch event for slug '{slug}': {e}")
+    return None
+
+
+def safe_get_event_by_market_slug(slug: str):
+    url = f"{POLYMARKET_GAMMA_ROOT}/markets?slug={slug}"
+    try:
+        response = requests.get(url)
+        market_objects = response.json()
+        if not (isinstance(market_objects, list) and len(market_objects) == 1):
+            return None
+
+        market_object = market_objects[0]
+        event_objects = market_object.get('events') or []
+        if not event_objects:
+            return None
+
+        event_object = event_objects[0]
+        event = Event(event_object['id'], event_object['slug'], event_object['title'])
+        event.add_market(Market.parse(market_object))
+        Event._assign_coin_tag(event, event_object.get('tags', []))
+        return event
+    except Exception as e:
+        print(f"❌ Failed to fetch market-backed event for slug '{slug}': {e}")
     return None
 
 def get_multiple_events_by_slugs(slugs: List[str]):

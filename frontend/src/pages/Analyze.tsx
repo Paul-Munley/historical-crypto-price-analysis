@@ -17,12 +17,36 @@ import { DateRangeEntry } from "../components/DateRangeSelector.types";
 import RollingDaysInput from "../components/RollingDaysInput";
 import SubmitButton from "../components/SubmitButton";
 import ResultsTable from "../components/ResultsTable";
+import ResearchResultsPanel from "../components/ResearchResultsPanel";
 import MarketPicker from "../components/MarketPickerV2";
 import PageContext from "../PageContext";
+import { ACTIONS as PageActions } from "../PageProvider";
 import EventSlugSelectorModal from "../components/EventSlugSelectorModal";
 
+const fetchThresholdsForEvent = async (event: any) => {
+	const thresholds: Record<string, number> = {};
+	const markets = event?.markets ?? [];
+
+	await Promise.all(
+		markets.map(async (market: any) => {
+			const existingThreshold = thresholds[market.slug];
+			if (existingThreshold !== undefined && existingThreshold !== null) {
+				return;
+			}
+
+			const response = await fetch(
+				`http://localhost:5001/extract-threshold?question=${encodeURIComponent(market.question)}`,
+			);
+			const payload = await response.json();
+			thresholds[market.slug] = payload.threshold;
+		}),
+	);
+
+	return thresholds;
+};
+
 const Analyze = () => {
-	const { state } = useContext(PageContext);
+	const { state, dispatch } = useContext(PageContext);
 
 	const DATE_RANGES_KEY = "savedDateRanges";
 	const [dateRanges, setDateRanges] = useState<DateRangeEntry[]>(() => {
@@ -48,18 +72,32 @@ const Analyze = () => {
 
 	const [rollingDays, setRollingDays] = useState<number>(8);
 	const [useMomentumConfluence, setUseMomentumConfluence] = useState(false);
-	const [momentumLookbackDays, setMomentumLookbackDays] = useState<number>(14);
+	const [momentumLookbackCandles, setMomentumLookbackCandles] =
+		useState<number>(14);
 	const [minPercentChange, setMinPercentChange] = useState<number>(6.56);
+	const [maxPercentChange, setMaxPercentChange] = useState<number>(15);
+	const [secondLookbackCandles, setSecondLookbackCandles] = useState<number>(1);
+	const [secondMinPercentChange, setSecondMinPercentChange] =
+		useState<number>(2.5);
+	const [secondMaxPercentChange, setSecondMaxPercentChange] =
+		useState<number>(10);
 	const [results, setResults] = useState<any>(null);
+	const [researchResponse, setResearchResponse] = useState<any>(null);
+	const [sampleSize, setSampleSize] = useState<number | null>(null);
+	const [compareWithResearch, setCompareWithResearch] =
+		useState<boolean>(false);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [eventSlugSelectorOpen, setEventSlugSelectorOpen] = useState(true);
+	const [rollingUnit, setRollingUnit] = useState<"days" | "hours" | "minutes">(
+		"days",
+	);
 
 	const handleRangeChange = (
 		id: number,
-		range: [dayjs.Dayjs | null, dayjs.Dayjs | null]
+		range: [dayjs.Dayjs | null, dayjs.Dayjs | null],
 	) => {
 		setDateRanges(prev =>
-			prev.map(entry => (entry.id === id ? { ...entry, range } : entry))
+			prev.map(entry => (entry.id === id ? { ...entry, range } : entry)),
 		);
 	};
 
@@ -77,32 +115,119 @@ const Analyze = () => {
 		e.preventDefault();
 		setLoading(true);
 		setResults(null);
+		setResearchResponse(null);
+
+		const use_hit_logic = state.eventToAnalyze?.slug
+			?.toLowerCase()
+			.includes("hit");
 
 		try {
+			let ensuredThresholds = state.thresholdsByQuestion;
+			const selectedEventMarkets = state.eventToAnalyze?.markets ?? [];
+			const missingThresholds = selectedEventMarkets.filter(
+				(market: any) =>
+					ensuredThresholds?.[market.slug] === undefined ||
+					ensuredThresholds?.[market.slug] === null ||
+					ensuredThresholds?.[market.slug] === "",
+			);
+
+			if (state.eventToAnalyze?.slug && missingThresholds.length > 0) {
+				const fetchedThresholds = await fetchThresholdsForEvent(
+					state.eventToAnalyze,
+				);
+				ensuredThresholds = {
+					...ensuredThresholds,
+					...fetchedThresholds,
+				};
+			}
+
 			const payload = {
 				dateRanges: dateRanges.map(({ range }) => ({
 					start: range[0]?.format("YYYY-MM-DD"),
 					end: range[1]?.format("YYYY-MM-DD"),
 				})),
-				thresholdsByQuestion: state.thresholdsByQuestion,
+				thresholdsByQuestion: ensuredThresholds,
 				eventToAnalyze: state.eventToAnalyze,
 				days: rollingDays,
+				rollingUnit: rollingUnit,
 				momentumConfluence: useMomentumConfluence
 					? {
-							lookbackDays: momentumLookbackDays,
-							minPercentChange: minPercentChange,
-					  }
+							filters: [
+								{
+									lookbackDays: momentumLookbackCandles,
+									minPercentChange: minPercentChange,
+									maxPercentChange: maxPercentChange,
+								},
+								{
+									lookbackDays: secondLookbackCandles,
+									minPercentChange: secondMinPercentChange,
+									maxPercentChange: secondMaxPercentChange,
+								},
+							],
+						}
 					: null,
+				use_hit_logic, // ✅ NEW LINE HERE
+				confidenceQuantile: 0.2,
+				slippage: 0.02,
 			};
 
-			const response = await axios.post(
-				"http://localhost:5001/analyze",
-				payload
+			if (ensuredThresholds !== state.thresholdsByQuestion) {
+				dispatch({
+					type: PageActions.UPDATE_THRESHOLDS,
+					payload: ensuredThresholds,
+				});
+			}
+
+			const requestConfigs = [
+				{
+					key: "research",
+					request: axios.post(
+						"http://localhost:5001/research/analyze",
+						payload,
+					),
+				},
+			];
+			if (compareWithResearch) {
+				requestConfigs.push({
+					key: "legacy",
+					request: axios.post("http://localhost:5001/analyze", payload),
+				});
+			}
+
+			const settledResponses = await Promise.allSettled(
+				requestConfigs.map(item => item.request),
 			);
-			setResults(response.data);
+
+			const failures: string[] = [];
+			settledResponses.forEach((result, index) => {
+				const requestKey = requestConfigs[index].key;
+				if (result.status === "fulfilled") {
+					if (requestKey === "legacy") {
+						setResults(result.value.data.results);
+						setSampleSize(result.value.data.sampleSize ?? null);
+					}
+					if (requestKey === "research") {
+						setResearchResponse(result.value.data);
+					}
+					return;
+				}
+
+				const axiosError = result.reason;
+				const serverMessage = axiosError?.response?.data?.error;
+				failures.push(
+					`${requestKey} analyze failed${serverMessage ? `: ${serverMessage}` : "."}`,
+				);
+				console.error(`Error in ${requestKey} analyze request:`, axiosError);
+			});
+
+			if (failures.length === requestConfigs.length) {
+				alert(failures.join("\n"));
+			} else if (failures.length > 0) {
+				alert(`Partial success:\n${failures.join("\n")}`);
+			}
 		} catch (err) {
 			console.error("Error analyzing data:", err);
-			alert("Something went wrong. Check backend server and your inputs.");
+			alert("Unexpected frontend error while analyzing data.");
 		} finally {
 			setLoading(false);
 		}
@@ -116,11 +241,14 @@ const Analyze = () => {
 			sx={{ flexWrap: "nowrap" }}
 		>
 			<Grid2 sx={{ width: "100%", minWidth: { lg: "532px" }, flex: 1 }}>
-				<EventSlugSelectorModal open={eventSlugSelectorOpen} onClose={() => setEventSlugSelectorOpen(false)} />
+				<EventSlugSelectorModal
+					open={eventSlugSelectorOpen}
+					onClose={() => setEventSlugSelectorOpen(false)}
+				/>
 				<Paper elevation={3}>
 					<form onSubmit={handleSubmit}>
 						<Box mb={2}>
-							<MarketPicker onAdd={() => setEventSlugSelectorOpen(true)}/>
+							<MarketPicker onAdd={() => setEventSlugSelectorOpen(true)} />
 						</Box>
 						<DateRangeSelector
 							dateRanges={dateRanges}
@@ -130,6 +258,21 @@ const Analyze = () => {
 							removeDateRange={removeDateRange}
 						/>
 						<Divider />
+						<Box mt={2}>
+							<label htmlFor="rolling-unit-select">Rolling Window Unit</label>
+							<select
+								id="rolling-unit-select"
+								value={rollingUnit}
+								onChange={e =>
+									setRollingUnit(e.target.value as "days" | "hours" | "minutes")
+								}
+								style={{ marginLeft: "0.5rem", padding: "0.3rem" }}
+							>
+								<option value="days">Days</option>
+								<option value="hours">Hours</option>
+								<option value="minutes">Minutes</option>
+							</select>
+						</Box>
 						<RollingDaysInput
 							rollingDays={rollingDays}
 							setRollingDays={setRollingDays}
@@ -148,20 +291,19 @@ const Analyze = () => {
 
 							{useMomentumConfluence && (
 								<>
+									{/* Filter 1 */}
 									<Box mt={1}>
-										<label>
-											Momentum Lookback Days (before threshold window)
-										</label>
+										<label>Momentum Lookback Candles (first filter)</label>
 										<input
 											type="number"
-											value={momentumLookbackDays}
+											value={momentumLookbackCandles}
 											onChange={e =>
-												setMomentumLookbackDays(parseInt(e.target.value))
+												setMomentumLookbackCandles(parseInt(e.target.value))
 											}
 										/>
 									</Box>
 									<Box mt={1}>
-										<label>Minimum % Price Change in Lookback Period</label>
+										<label>Minimum % Price Change (first filter)</label>
 										<input
 											type="number"
 											value={minPercentChange}
@@ -170,8 +312,63 @@ const Analyze = () => {
 											}
 										/>
 									</Box>
+									<Box mt={1}>
+										<label>Maximum % Price Change (first filter)</label>
+										<input
+											type="number"
+											value={maxPercentChange}
+											onChange={e =>
+												setMaxPercentChange(parseFloat(e.target.value))
+											}
+										/>
+									</Box>
+
+									<Divider sx={{ my: 2 }} />
+
+									{/* Filter 2 */}
+									<Box mt={1}>
+										<label>Momentum Lookback Candles (second filter)</label>
+										<input
+											type="number"
+											value={secondLookbackCandles}
+											onChange={e =>
+												setSecondLookbackCandles(parseInt(e.target.value))
+											}
+										/>
+									</Box>
+									<Box mt={1}>
+										<label>Minimum % Price Change (second filter)</label>
+										<input
+											type="number"
+											value={secondMinPercentChange}
+											onChange={e =>
+												setSecondMinPercentChange(parseFloat(e.target.value))
+											}
+										/>
+									</Box>
+									<Box mt={1}>
+										<label>Maximum % Price Change (second filter)</label>
+										<input
+											type="number"
+											value={secondMaxPercentChange}
+											onChange={e =>
+												setSecondMaxPercentChange(parseFloat(e.target.value))
+											}
+										/>
+									</Box>
 								</>
 							)}
+						</Box>
+						<Box mt={2}>
+							<FormControlLabel
+								control={
+									<Checkbox
+										checked={compareWithResearch}
+										onChange={e => setCompareWithResearch(e.target.checked)}
+									/>
+								}
+								label="Include legacy comparison table"
+							/>
 						</Box>
 						<Box mt={2}>
 							<SubmitButton loading={loading} />
@@ -179,7 +376,23 @@ const Analyze = () => {
 					</form>
 				</Paper>
 			</Grid2>
-			<Grid2 size={9}>{results && <ResultsTable results={results} />}</Grid2>
+			<Grid2 size={9}>
+				{results && (
+					<>
+						<ResultsTable results={results} />
+						{sampleSize !== null && (
+							<Box mt={1} textAlign="right" fontSize="0.85rem" color="gray">
+								Based on {sampleSize} historical samples.
+							</Box>
+						)}
+					</>
+				)}
+				{researchResponse && (
+					<Box mt={2}>
+						<ResearchResultsPanel response={researchResponse} />
+					</Box>
+				)}
+			</Grid2>
 		</Grid2>
 	);
 };

@@ -2,7 +2,6 @@ from typing import List, Dict
 import requests
 from datetime import datetime
 from polycobra_backend.constants.coins import Coin
-import os
 
 COINAPI_ROOT = "https://rest.coinapi.io/v1"
 COINAPI_KEY = "b9e2a6aa-f61b-4050-b3de-70c828e574e3"
@@ -56,48 +55,25 @@ def get_ticker_prices(coins: List[Coin]) -> Dict[Coin, float]:
             raise Exception(f"Unexpected response structure for {coin.label}: {data}")
 
     return prices
-    """
-    Fetches the latest USD ticker prices for the given list of coins from CoinAPI.
-
-    Args:
-        coins (List[Coin]): A list of Coin enum members to retrieve prices for.
-
-    Returns:
-        Dict[Coin, float]: A dictionary mapping each Coin to its current USD price.
-    """
-    prices: Dict[Coin, float] = {}
-
-    for coin in coins:
-        symbol_id = SYMBOL_MAP.get(coin.label.upper())
-        if not symbol_id:
-            raise ValueError(f"No CoinAPI symbol mapping for {coin.label}")
-
-        url = f"{COINAPI_ROOT}/quotes/current?filter_symbol_id={symbol_id}"
-        headers = {"X-CoinAPI-Key": COINAPI_KEY}
-
-        res = requests.get(url, headers=headers)
-        if res.status_code != 200:
-            raise Exception(f"Failed to fetch data for {coin.label}: {res.text}")
-
-        data = res.json()
-        if isinstance(data, list) and data:
-            prices[coin] = float(data[0]["price_mid"])
-        else:
-            raise Exception(f"Unexpected response structure for {coin.label}: {data}")
-
-    return prices
 
 
 def get_timestamp(date_string: str) -> str:
     return datetime.strptime(date_string, "%Y-%m-%d").isoformat()
 
 
-def fetch_prices(symbol: str, start: str, end: str) -> List[float]:
+def fetch_prices(symbol: str, start: str, end: str, rolling_unit="days") -> List[float]:
     """
-    Fetches historical daily closing prices for a symbol from CoinAPI.
+    Fetches historical closing prices for a symbol from CoinAPI, with configurable granularity.
     """
+
+    granularity_map = {
+        "days": "1DAY",
+        "hours": "1HRS",
+        "minutes": "1MIN"
+    }
+    period_id = granularity_map.get(rolling_unit, "1DAY")
+
     symbol_id = SYMBOL_MAP.get(symbol.upper(), f"BINANCE_SPOT_{symbol.upper()}_USDT")
-    period_id = "1DAY"
     time_start = get_timestamp(start)
     time_end = get_timestamp(end)
 
@@ -122,6 +98,52 @@ def fetch_prices(symbol: str, start: str, end: str) -> List[float]:
 
     print(f"[DEBUG] Fetched {len(prices)} prices. Sample: {prices[:5]}")
     return prices
+
+
+def fetch_candles(symbol: str, start: str, end: str, rolling_unit="days") -> List[dict]:
+    granularity_map = {
+        "days": "1DAY",
+        "hours": "1HRS",
+        "minutes": "1MIN"
+    }
+    period_id = granularity_map.get(rolling_unit, "1DAY")
+
+    symbol_id = SYMBOL_MAP.get(symbol.upper(), f"BINANCE_SPOT_{symbol.upper()}_USDT")
+    time_start = get_timestamp(start)
+    time_end = get_timestamp(end)
+
+    url = (
+        f"{COINAPI_ROOT}/ohlcv/{symbol_id}/history"
+        f"?period_id={period_id}"
+        f"&time_start={time_start}"
+        f"&time_end={time_end}"
+    )
+
+    headers = {"X-CoinAPI-Key": COINAPI_KEY}
+
+    print(f"[DEBUG] Requesting candles for {symbol} from {start} to {end}")
+    print(f"[DEBUG] Full URL: {url}")
+
+    res = requests.get(url, headers=headers)
+    if res.status_code != 200:
+        raise Exception(f"Failed to fetch data: {res.status_code} {res.text}")
+
+    data = res.json()
+    candles = [
+        {
+            "time_period_start": entry.get("time_period_start"),
+            "open": entry.get("price_open"),
+            "high": entry.get("price_high"),
+            "low": entry.get("price_low"),
+            "close": entry.get("price_close"),
+            "volume": entry.get("volume_traded"),
+        }
+        for entry in data
+        if entry.get("price_close") is not None
+    ]
+
+    print(f"[DEBUG] Fetched {len(candles)} candles. Sample: {candles[:2]}")
+    return candles
 
 
 if __name__ == '__main__':

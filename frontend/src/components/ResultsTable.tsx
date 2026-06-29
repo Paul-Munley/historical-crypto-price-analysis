@@ -1,16 +1,16 @@
-import React, { useState } from "react";
+// src/components/ResultsTable.tsx
+import React, { useEffect, useMemo, useState } from "react";
 import {
 	Box,
-	Grid2,
+	Card,
 	Table,
 	TableBody,
 	TableCell,
 	TableContainer,
 	TableHead,
 	TableRow,
-	Paper,
 	styled,
-	Card,
+	TextField,
 } from "@mui/material";
 
 import btcIcon from "../assets/icons/crypto/btc.png";
@@ -25,79 +25,25 @@ import xrpDesatIcon from "../assets/icons/crypto/xrp-desat.png";
 import { Coin } from "../types";
 
 interface ResultRow {
-	change: number;
-	occurred: number;
-	yesOdds: number;
-	yesEV: number;
-	noOdds: number;
-	noEV: number;
+	threshold: number | string;
+	change: number; // % change (e.g., 1.23 for 1.23%)
+	occurred: number; // % occurred (e.g., 68.27 for 68.27%)
+	yesOdds: number; // market prob (0-1)
+	yesEV: number; // %
+	noOdds: number; // market prob (0-1)
+	noEV: number; // %
 }
 
-type ResultsData = {
-	[key in Coin]: ResultRow[];
-};
+type ResultsData = Record<Coin, ResultRow[]> | ResultRow[];
 
 interface Props {
-	results?: ResultsData; // Optional now to allow fallback to dummy
+	results?: ResultsData;
 }
 
-const dummyResults: ResultsData = {
-	BTC: [
-		{
-			change: 48.07,
-			occurred: 1.5,
-			yesOdds: 0.003,
-			yesEV: 151,
-			noOdds: 0.998,
-			noEV: 98.1,
-		},
-		{
-			change: 37.5,
-			occurred: 99.5,
-			yesOdds: 0.004,
-			yesEV: 151,
-			noOdds: 0.997,
-			noEV: 98.2,
-		},
-		{
-			change: -20.67,
-			occurred: 8.96,
-			yesOdds: 0.027,
-			yesEV: 98.6,
-			noOdds: 0.974,
-			noEV: -96,
-		},
-		{
-			change: -47.12,
-			occurred: 0.5,
-			yesOdds: 0.999,
-			yesEV: 100.1,
-			noOdds: 0.999,
-			noEV: -100,
-		},
-	],
-	ETH: [],
-	SOL: [],
-	XRP: [],
-};
-
-const coinColors: Record<Coin, string> = {
-	BTC: "#F7931A",
-	ETH: "#627EEA",
-	SOL: "#14F195",
-	XRP: "#1E90FF",
-};
-
-const coinIconsMap: Record<Coin, { icon: string; desat: string }> = {
-	BTC: { icon: btcIcon, desat: btcDesatIcon },
-	ETH: { icon: ethIcon, desat: ethDesatIcon },
-	SOL: { icon: solIcon, desat: solDesatIcon },
-	XRP: { icon: xrpIcon, desat: xrpDesatIcon },
-};
-
+// ——— styles ———
 const CoinTabButton = styled(Box, {
 	shouldForwardProp: prop => prop !== "active" && prop !== "coin",
-})<{ active: boolean; coin: Coin }>(({ active, coin }) => ({
+})<{ active: boolean; coin: Coin }>(({ active }) => ({
 	display: "flex",
 	alignItems: "center",
 	padding: "0 0.75rem 1rem 0.75rem",
@@ -107,13 +53,9 @@ const CoinTabButton = styled(Box, {
 	fontWeight: 200,
 	border: "none",
 	borderBottom: "2.5px solid",
-	borderColor: active ? coinColors[coin] : "transparent",
-	color: active ? coinColors[coin] : "#FFFFFF",
+	borderColor: active ? "#fff" : "transparent",
+	color: active ? "#fff" : "#FFFFFFA0",
 	transition: "all 0.2s ease",
-	"&:hover": {
-		color: coinColors[coin],
-		borderColor: coinColors[coin],
-	},
 }));
 
 const StyledTableRow = styled(TableRow)<{ dimmed: boolean }>(({ dimmed }) => ({
@@ -124,43 +66,85 @@ const StyledTableRow = styled(TableRow)<{ dimmed: boolean }>(({ dimmed }) => ({
 	},
 }));
 
-const ResultsTable: React.FC<Props> = ({ results }) => {
-	const allResults: any = results ?? [];
-	const selectedCoins = Object.keys(allResults) as Coin[];
-	const [activeCoin, setActiveCoin] = useState<Coin>(selectedCoins[0] ?? "BTC");
+// ——— helpers ———
+const clamp = (v: number, lo: number, hi: number) =>
+	Math.max(lo, Math.min(hi, v));
 
-	// const rows = allResults[activeCoin] || [];
-	const rows = allResults;
-	const sortedRows = [...rows].sort((a, b) => b.change - a.change);
+/**
+ * Recompute EVs from occurred% and yesOdds.
+ * Yes EV % = (p / y - 1) * 100
+ * No  EV % = ((1 - p) / (1 - y) - 1) * 100
+ */
+function withRecomputedEV(row: ResultRow, nextYesOdds: number): ResultRow {
+	const p = clamp(row.occurred / 100, 0.0001, 0.9999);
+	const y = clamp(nextYesOdds, 0.0001, 0.9999);
+	const n = clamp(1 - y, 0.0001, 0.9999);
+
+	const yesEV = (p / y - 1) * 100;
+	const noEV = ((1 - p) / n - 1) * 100;
+
+	return {
+		...row,
+		yesOdds: y,
+		yesEV,
+		noOdds: n,
+		noEV,
+	};
+}
+
+const ResultsTable: React.FC<Props> = ({ results }) => {
+	// Normalize incoming data shape (you were already using a flat array)
+	const incomingRows: ResultRow[] = useMemo(() => {
+		if (!results) return [];
+		// If results is keyed by coin, take the first coin’s rows
+		if (!Array.isArray(results)) {
+			const first = Object.values(results)[0] ?? [];
+			return first as ResultRow[];
+		}
+		return results as ResultRow[];
+	}, [results]);
+
+	// Local editable copy
+	const [rows, setRows] = useState<ResultRow[]>([]);
+
+	useEffect(() => {
+		// Initialize with recomputed rows to ensure derived fields are consistent
+		const initialized = (incomingRows ?? []).map(r =>
+			withRecomputedEV(r, r.yesOdds)
+		);
+		setRows(initialized);
+	}, [incomingRows]);
+
+	// Sort by % change desc (your previous behavior)
+	const sortedRows = useMemo(
+		() => [...rows].sort((a, b) => b.change - a.change),
+		[rows]
+	);
+
+	const handleYesOddsChange = (idxInSorted: number, raw: string) => {
+		const val = Number(raw);
+		if (Number.isNaN(val)) return;
+
+		// Map sorted index back to original index
+		const sorted = sortedRows;
+		const target = sorted[idxInSorted];
+
+		const originalIndex = rows.findIndex(
+			r =>
+				r.threshold === target.threshold &&
+				r.change === target.change &&
+				r.occurred === target.occurred
+		);
+		if (originalIndex === -1) return;
+
+		const updated = withRecomputedEV(rows[originalIndex], val);
+		const next = [...rows];
+		next[originalIndex] = updated;
+		setRows(next);
+	};
 
 	return (
 		<Card sx={{ padding: "1rem 0" }}>
-			{/* <Box
-				display="flex"
-				gap={3}
-				mb={1}
-				sx={{ borderBottom: "1px solid #FFFFFF50" }}
-			>
-				{selectedCoins.map(coin => {
-					const active = activeCoin === coin;
-					const iconSrc = active
-						? coinIconsMap[coin].icon
-						: coinIconsMap[coin].desat;
-
-					return (
-						<CoinTabButton
-							key={coin}
-							active={active}
-							coin={coin}
-							onClick={() => setActiveCoin(coin)}
-						>
-							<img src={iconSrc} alt={coin} width={20} height={20} />
-							<span>{coin}</span>
-						</CoinTabButton>
-					);
-				})}
-			</Box> */}
-
 			<TableContainer sx={{ background: "transparent" }}>
 				<Table>
 					<TableHead>
@@ -174,37 +158,73 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 							<TableCell>No EV %</TableCell>
 						</TableRow>
 					</TableHead>
+
 					<TableBody sx={{ padding: "0.75rem" }}>
 						{sortedRows.map((row, index) => {
-							const { threshold, change, occurred, yesOdds, yesEV, noOdds, noEV } = row;
-							const dimmed = occurred < 1 || occurred > 99;
+							const dimmed = row.occurred < 1 || row.occurred > 99;
 
 							return (
-								<StyledTableRow key={index} dimmed={dimmed}>
-									<TableCell>{threshold}</TableCell>
+								<StyledTableRow
+									key={`${row.threshold}-${index}`}
+									dimmed={dimmed}
+								>
+									<TableCell>{row.threshold}</TableCell>
+
 									<TableCell sx={{ border: "none" }}>
-										{change.toFixed(2)}%
+										{row.change.toFixed(2)}%
 									</TableCell>
+
 									<TableCell sx={{ border: "none" }}>
-										{occurred.toFixed(2)}%
+										{row.occurred.toFixed(2)}%
 									</TableCell>
-									<TableCell sx={{ border: "none" }}>{yesOdds}</TableCell>
+
+									{/* Editable Yes PM Odds */}
+									<TableCell sx={{ border: "none", minWidth: 120 }}>
+										<TextField
+											value={row.yesOdds.toFixed(3)}
+											onChange={e => handleYesOddsChange(index, e.target.value)}
+											type="number"
+											inputProps={{
+												step: "0.001",
+												min: "0.000",
+												max: "0.999",
+											}}
+											size="small"
+											variant="outlined"
+											sx={{
+												"& input": {
+													textAlign: "right",
+													fontVariantNumeric: "tabular-nums",
+												},
+												width: 110,
+											}}
+										/>
+									</TableCell>
+
 									<TableCell
 										sx={{
-											color: yesEV > 0 ? "limegreen" : "red",
+											color: row.yesEV > 0 ? "limegreen" : "red",
 											border: "none",
+											fontVariantNumeric: "tabular-nums",
 										}}
 									>
-										{yesEV.toFixed(1)}%
+										{row.yesEV.toFixed(1)}%
 									</TableCell>
-									<TableCell sx={{ border: "none" }}>{noOdds}</TableCell>
+
+									<TableCell
+										sx={{ border: "none", fontVariantNumeric: "tabular-nums" }}
+									>
+										{row.noOdds.toFixed(3)}
+									</TableCell>
+
 									<TableCell
 										sx={{
-											color: noEV > 0 ? "limegreen" : "red",
+											color: row.noEV > 0 ? "limegreen" : "red",
 											border: "none",
+											fontVariantNumeric: "tabular-nums",
 										}}
 									>
-										{noEV.toFixed(1)}%
+										{row.noEV.toFixed(1)}%
 									</TableCell>
 								</StyledTableRow>
 							);
