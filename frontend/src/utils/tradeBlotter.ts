@@ -31,7 +31,11 @@ export const loadTradesFromServer = async (): Promise<TradeRecord[]> => {
 	if (Array.isArray(state.trades) && state.trades.length > 0) {
 		return hydrateTrades(state.trades);
 	}
-	return loadTrades();
+	const localTrades = loadTrades();
+	if (localTrades.length > 0) {
+		await savePersistedAppStatePatch({ trades: localTrades });
+	}
+	return localTrades;
 };
 
 export const upsertTrade = (trade: TradeRecord) => {
@@ -58,7 +62,7 @@ export const makeTradeId = () =>
 export const defaultEntryPriceForSide = (
 	side: TradeSide,
 	yesOdds?: number,
-	noOdds?: number
+	noOdds?: number,
 ) => {
 	const fallback = side === "Yes" ? yesOdds : noOdds;
 	return typeof fallback === "number" ? fallback : 0.5;
@@ -67,7 +71,7 @@ export const defaultEntryPriceForSide = (
 export const computePotentialPnl = (
 	amountUsd: number,
 	entryPrice: number,
-	status: TradeStatus
+	status: TradeStatus,
 ) => {
 	if (entryPrice <= 0 || entryPrice >= 1 || amountUsd <= 0) {
 		return null;
