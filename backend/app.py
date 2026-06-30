@@ -3,6 +3,7 @@ import json
 import math
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
@@ -37,6 +38,8 @@ from research_engine.service import (
 app = Flask(__name__)
 CORS(app)
 
+APP_STATE_FILE = Path(__file__).resolve().parent / "data" / "app_state.json"
+
 NEW_YORK_TZ = ZoneInfo("America/New_York")
 TITLE_DATE_PATTERN = re.compile(r"\bon\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b", re.IGNORECASE)
 TITLE_MONTH_WINDOW_PATTERN = re.compile(r"\bin\s+([A-Za-z]+)(?:\s+(\d{4}))?\b", re.IGNORECASE)
@@ -60,6 +63,40 @@ class DateRange:
     def __init__(self, start, end):
         self.start: str = start
         self.end: str = end
+
+
+def _default_app_state():
+    return {
+        "dateRanges": [],
+        "trades": [],
+    }
+
+
+def _load_app_state():
+    if not APP_STATE_FILE.exists():
+        return _default_app_state()
+    try:
+        payload = json.loads(APP_STATE_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return _default_app_state()
+
+    if not isinstance(payload, dict):
+        return _default_app_state()
+
+    return {
+        "dateRanges": payload.get("dateRanges", []) if isinstance(payload.get("dateRanges", []), list) else [],
+        "trades": payload.get("trades", []) if isinstance(payload.get("trades", []), list) else [],
+    }
+
+
+def _save_app_state(state: dict):
+    APP_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    normalized = {
+        "dateRanges": state.get("dateRanges", []) if isinstance(state.get("dateRanges", []), list) else [],
+        "trades": state.get("trades", []) if isinstance(state.get("trades", []), list) else [],
+    }
+    APP_STATE_FILE.write_text(json.dumps(normalized, indent=2, sort_keys=True))
+    return normalized
 
 
 def _normalize_event_to_analyze(raw_event_to_analyze):
@@ -301,6 +338,21 @@ def _window_fetch_date_range(window_start_iso: str | None) -> tuple[str, str] | 
     return start_str, end_str
 
 
+def _recent_context_date_range(rolling_unit: str, rolling_steps: int) -> tuple[str, str]:
+    unit_seconds = {
+        "days": 86_400,
+        "hours": 3_600,
+        "minutes": 60,
+    }.get(rolling_unit, 86_400)
+    lookback_bars = max(rolling_steps * 3, 30)
+    lookback_days = max(2, math.ceil((lookback_bars * unit_seconds) / 86_400))
+
+    now_utc = datetime.now(timezone.utc)
+    start_str = (now_utc - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+    end_str = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
+    return start_str, end_str
+
+
 def _should_prefer_direct_binance(event, event_to_analyze: dict, request_data: dict) -> bool:
     if not bool(request_data.get("preferDirectBinance", True)):
         return False
@@ -373,6 +425,22 @@ def ticker_prices():
         result[key.label] = value
 
     return result
+
+
+@app.route('/app-state', methods=["GET", "POST"])
+def app_state():
+    if request.method == "GET":
+        return jsonify(_load_app_state())
+
+    payload = request.get_json(silent=True) or {}
+    current_state = _load_app_state()
+
+    if "dateRanges" in payload:
+        current_state["dateRanges"] = payload.get("dateRanges", []) if isinstance(payload.get("dateRanges", []), list) else []
+    if "trades" in payload:
+        current_state["trades"] = payload.get("trades", []) if isinstance(payload.get("trades", []), list) else []
+
+    return jsonify(_save_app_state(current_state))
 
 
 @app.route('/extract-threshold', methods=["GET"])
@@ -508,6 +576,26 @@ def research_analyze():
         except Exception:
             current_window_candles = None
 
+    recent_context_candles = None
+    recent_start_str, recent_end_str = _recent_context_date_range(rolling_unit, rolling_steps)
+    try:
+        if prefer_direct_binance and supports_direct_binance(event.coin_tag.label):
+            recent_context_candles = fetch_binance_candles(
+                event.coin_tag.label,
+                recent_start_str,
+                recent_end_str,
+                rolling_unit,
+            )
+        else:
+            recent_context_candles = fetch_candles(
+                event.coin_tag.label,
+                recent_start_str,
+                recent_end_str,
+                rolling_unit,
+            )
+    except Exception:
+        recent_context_candles = None
+
     return jsonify(
         run_research_analysis_from_legacy(
             event_to_analyze=event_to_analyze,
@@ -515,6 +603,7 @@ def research_analyze():
             thresholds_by_question=thresholds_by_question,
             historical_candles=historical_candles,
             current_window_candles=current_window_candles,
+            recent_context_candles=recent_context_candles,
             current_price=current_price,
             rolling_steps=rolling_steps,
             confidence_quantile=float(data.get("confidenceQuantile", 0.20)),

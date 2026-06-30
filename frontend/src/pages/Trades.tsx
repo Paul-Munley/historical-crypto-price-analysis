@@ -22,6 +22,7 @@ import {
 	formatCurrency,
 	formatPctFromProb,
 	loadTrades,
+	loadTradesFromServer,
 } from "../utils/tradeBlotter";
 
 const StatCard = ({ label, value }: { label: string; value: string }) => (
@@ -39,6 +40,9 @@ const Trades: React.FC = () => {
 
 	useEffect(() => {
 		setTrades(loadTrades());
+		void (async () => {
+			setTrades(await loadTradesFromServer());
+		})();
 	}, []);
 
 	const summary = useMemo(() => {

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import asdict
 from datetime import datetime, timedelta
+import math
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -265,6 +266,88 @@ def _dedupe_result_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(deduped.values())
 
 
+def _safe_log_return(curr_close: float, prev_close: float) -> float | None:
+    if curr_close <= 0 or prev_close <= 0:
+        return None
+    try:
+        return math.log(curr_close / prev_close)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def _expected_move_pct(recent_context_candles: list[dict[str, Any]] | None, rolling_steps: int) -> float | None:
+    if not recent_context_candles or len(recent_context_candles) < 2 or rolling_steps <= 0:
+        return None
+
+    closes: list[float] = []
+    for candle in recent_context_candles:
+        try:
+            closes.append(float(candle["close"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    if len(closes) < 2:
+        return None
+
+    returns = [
+        ret for prev_close, curr_close in zip(closes[:-1], closes[1:])
+        if (ret := _safe_log_return(curr_close, prev_close)) is not None
+    ]
+    if len(returns) < 2:
+        return None
+
+    mean_ret = sum(returns) / len(returns)
+    variance = sum((ret - mean_ret) ** 2 for ret in returns) / (len(returns) - 1)
+    if variance <= 0:
+        return 0.0
+
+    per_bar_vol = math.sqrt(variance)
+    horizon_vol = per_bar_vol * math.sqrt(rolling_steps)
+    return horizon_vol * 100.0
+
+
+def _distance_to_strike_pct(current_price: float, semantics, target_price: float) -> float | None:
+    if current_price <= 0:
+        return None
+
+    if semantics.mode in {"hit_high", "close_above"} and target_price > 0:
+        return ((target_price - current_price) / current_price) * 100.0
+    if semantics.mode in {"hit_low", "close_below"} and target_price > 0:
+        return ((current_price - target_price) / current_price) * 100.0
+    if semantics.mode == "close_range":
+        lower = float(semantics.lower_bound) if semantics.lower_bound is not None else None
+        upper = float(semantics.upper_bound) if semantics.upper_bound is not None else None
+        if lower is not None and current_price < lower:
+            return ((lower - current_price) / current_price) * 100.0
+        if upper is not None and current_price > upper:
+            return ((current_price - upper) / current_price) * 100.0
+        return 0.0
+    return None
+
+
+def _volatility_context_metrics(
+    *,
+    current_price: float,
+    semantics,
+    target_price: float,
+    rolling_steps: int,
+    recent_context_candles: list[dict[str, Any]] | None,
+    horizon_metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    expected_move_pct = _expected_move_pct(recent_context_candles, rolling_steps)
+    distance_pct = _distance_to_strike_pct(current_price, semantics, target_price)
+    vol_distance = None
+    if expected_move_pct not in [None, 0] and distance_pct is not None:
+        vol_distance = distance_pct / expected_move_pct
+
+    return {
+        "time_to_expiry_label": str((horizon_metadata or {}).get("inferred_display") or "-"),
+        "distance_to_strike_pct": distance_pct,
+        "expected_move_pct": expected_move_pct,
+        "vol_normalized_distance": vol_distance,
+    }
+
+
 def run_research_analysis(
     contracts: list[dict[str, Any]],
     historical_rows: list[dict[str, Any]],
@@ -367,6 +450,7 @@ def run_research_analysis_from_legacy(
     thresholds_by_question: dict[str, Any],
     historical_candles: list[dict[str, Any]],
     current_window_candles: list[dict[str, Any]] | None,
+    recent_context_candles: list[dict[str, Any]] | None,
     current_price: float,
     rolling_steps: int,
     confidence_quantile: float = 0.20,
@@ -456,6 +540,14 @@ def run_research_analysis_from_legacy(
         occurred_pct = (sum(binary_outcomes) / len(binary_outcomes) * 100) if binary_outcomes else 0.0
         percent_change = ((target_price - current_price) / current_price * 100) if current_price and target_price else 0.0
         contract_direction = _contract_direction_from_mode(semantics.mode)
+        vol_metrics = _volatility_context_metrics(
+            current_price=current_price,
+            semantics=semantics,
+            target_price=target_price,
+            rolling_steps=rolling_steps,
+            recent_context_candles=recent_context_candles,
+            horizon_metadata=horizon_metadata,
+        )
         results.append(
             {
                 "market_id": snapshot.market_id,
@@ -489,6 +581,7 @@ def run_research_analysis_from_legacy(
                 "confidence_lower_bound_yes": fair_value.confidence_lower_bound_yes,
                 "source_group": fair_value.source_group,
                 "family_key": _build_family_key(snapshot),
+                **vol_metrics,
             }
         )
 

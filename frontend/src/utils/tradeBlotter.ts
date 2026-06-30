@@ -1,4 +1,5 @@
 import { TradeRecord, TradeSide, TradeStatus } from "../types";
+import { loadPersistedAppState, savePersistedAppStatePatch } from "./appState";
 
 export const TRADE_BLOTTER_STORAGE_KEY = "polycobra_trade_blotter";
 
@@ -17,6 +18,20 @@ export const loadTrades = (): TradeRecord[] => {
 
 export const saveTrades = (trades: TradeRecord[]) => {
 	localStorage.setItem(TRADE_BLOTTER_STORAGE_KEY, JSON.stringify(trades));
+	void savePersistedAppStatePatch({ trades });
+};
+
+export const hydrateTrades = (trades: TradeRecord[]) => {
+	localStorage.setItem(TRADE_BLOTTER_STORAGE_KEY, JSON.stringify(trades));
+	return trades;
+};
+
+export const loadTradesFromServer = async (): Promise<TradeRecord[]> => {
+	const state = await loadPersistedAppState();
+	if (Array.isArray(state.trades) && state.trades.length > 0) {
+		return hydrateTrades(state.trades);
+	}
+	return loadTrades();
 };
 
 export const upsertTrade = (trade: TradeRecord) => {
