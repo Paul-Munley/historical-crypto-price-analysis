@@ -19,7 +19,12 @@ const RollingDaysInput: React.FC<RollingDaysInputProps> = ({
 	return (
 		<Box mb={4} mt={3}>
 			<Typography variant="h6" mb={2}>
-				Rolling Unit
+				Manual Rolling Steps
+			</Typography>
+			<Typography variant="body2" color="text.secondary" mb={1.5}>
+				Research mode now auto-infers the horizon from the Polymarket contract
+				end time when available. This field mainly matters for legacy comparison
+				or manual fallback.
 			</Typography>
 			<TextField
 				type="number"

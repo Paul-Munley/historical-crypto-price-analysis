@@ -22,6 +22,8 @@ import MarketPicker from "../components/MarketPickerV2";
 import PageContext from "../PageContext";
 import { ACTIONS as PageActions } from "../PageProvider";
 import EventSlugSelectorModal from "../components/EventSlugSelectorModal";
+import TradeTicketModal from "../components/TradeTicketModal";
+import { TradeSeed } from "../types";
 
 const fetchThresholdsForEvent = async (event: any) => {
 	const thresholds: Record<string, number> = {};
@@ -88,9 +90,16 @@ const Analyze = () => {
 		useState<boolean>(false);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [eventSlugSelectorOpen, setEventSlugSelectorOpen] = useState(true);
+	const [tradeSeed, setTradeSeed] = useState<TradeSeed | null>(null);
+	const [tradeModalOpen, setTradeModalOpen] = useState<boolean>(false);
 	const [rollingUnit, setRollingUnit] = useState<"days" | "hours" | "minutes">(
 		"days",
 	);
+
+	const handleLogTrade = (seed: TradeSeed) => {
+		setTradeSeed(seed);
+		setTradeModalOpen(true);
+	};
 
 	const handleRangeChange = (
 		id: number,
@@ -150,6 +159,7 @@ const Analyze = () => {
 				eventToAnalyze: state.eventToAnalyze,
 				days: rollingDays,
 				rollingUnit: rollingUnit,
+				autoRollingSteps: true,
 				momentumConfluence: useMomentumConfluence
 					? {
 							filters: [
@@ -379,7 +389,12 @@ const Analyze = () => {
 			<Grid2 size={9}>
 				{results && (
 					<>
-						<ResultsTable results={results} />
+						<ResultsTable
+							results={results}
+							eventTitle={state.eventToAnalyze?.title || ""}
+							eventSlug={state.eventToAnalyze?.slug}
+							onLogTrade={handleLogTrade}
+						/>
 						{sampleSize !== null && (
 							<Box mt={1} textAlign="right" fontSize="0.85rem" color="gray">
 								Based on {sampleSize} historical samples.
@@ -389,10 +404,23 @@ const Analyze = () => {
 				)}
 				{researchResponse && (
 					<Box mt={2}>
-						<ResearchResultsPanel response={researchResponse} />
+						<ResearchResultsPanel
+							response={researchResponse}
+							eventTitle={state.eventToAnalyze?.title || ""}
+							eventSlug={state.eventToAnalyze?.slug}
+							onLogTrade={handleLogTrade}
+						/>
 					</Box>
 				)}
 			</Grid2>
+			<TradeTicketModal
+				open={tradeModalOpen}
+				onClose={() => {
+					setTradeModalOpen(false);
+					setTradeSeed(null);
+				}}
+				seed={tradeSeed}
+			/>
 		</Grid2>
 	);
 };

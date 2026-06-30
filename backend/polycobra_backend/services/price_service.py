@@ -1,10 +1,14 @@
 from typing import List, Dict
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from polycobra_backend.constants.coins import Coin
 
 COINAPI_ROOT = "https://rest.coinapi.io/v1"
 COINAPI_KEY = "b9e2a6aa-f61b-4050-b3de-70c828e574e3"
+BINANCE_API_ROOTS = [
+    "https://data-api.binance.vision",
+    "https://api.binance.com",
+]
 SECONDS_PER_DAY = 86400
 
 # Maps coin label → CoinAPI format
@@ -15,6 +19,133 @@ SYMBOL_MAP = {
     "DOGE": "BINANCE_SPOT_DOGE_USDT",
     "SOL": "BINANCE_SPOT_SOL_USDT",
 }
+
+BINANCE_SYMBOL_MAP = {
+    "BTC": "BTCUSDT",
+    "ETH": "ETHUSDT",
+    "XRP": "XRPUSDT",
+    "DOGE": "DOGEUSDT",
+    "SOL": "SOLUSDT",
+}
+
+BINANCE_INTERVAL_MAP = {
+    "days": "1d",
+    "hours": "1h",
+    "minutes": "1m",
+}
+
+BINANCE_INTERVAL_MS = {
+    "1d": 86_400_000,
+    "1h": 3_600_000,
+    "1m": 60_000,
+}
+
+
+def supports_direct_binance(symbol: str) -> bool:
+    return symbol.upper() in BINANCE_SYMBOL_MAP
+
+
+def _date_string_to_epoch_ms(date_string: str) -> int:
+    dt = datetime.strptime(date_string, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return int(dt.timestamp() * 1000)
+
+
+def _get_binance_symbol(symbol: str) -> str:
+    binance_symbol = BINANCE_SYMBOL_MAP.get(symbol.upper())
+    if not binance_symbol:
+        raise ValueError(f"No Binance spot symbol mapping for {symbol}")
+    return binance_symbol
+
+
+def get_binance_ticker_price(symbol: str) -> float:
+    binance_symbol = _get_binance_symbol(symbol)
+    errors: list[str] = []
+    for root in BINANCE_API_ROOTS:
+        response = requests.get(
+            f"{root}/api/v3/ticker/price",
+            params={"symbol": binance_symbol},
+            timeout=20,
+        )
+        if response.status_code == 200:
+            payload = response.json()
+            return float(payload["price"])
+        errors.append(f"{root}: {response.status_code} {response.text}")
+
+    raise Exception(f"Failed to fetch Binance ticker for {symbol}: {' | '.join(errors)}")
+
+
+def _fetch_binance_klines(symbol: str, interval: str, start_ms: int, end_ms: int) -> list[list]:
+    if end_ms <= start_ms:
+        return []
+
+    errors: list[str] = []
+    binance_symbol = _get_binance_symbol(symbol)
+
+    for root in BINANCE_API_ROOTS:
+        all_rows: list[list] = []
+        cursor = start_ms
+        step_ms = BINANCE_INTERVAL_MS[interval]
+
+        while cursor < end_ms:
+            response = requests.get(
+                f"{root}/api/v3/klines",
+                params={
+                    "symbol": binance_symbol,
+                    "interval": interval,
+                    "startTime": cursor,
+                    "endTime": end_ms - 1,
+                    "limit": 1000,
+                },
+                timeout=30,
+            )
+            if response.status_code != 200:
+                errors.append(f"{root}: {response.status_code} {response.text}")
+                all_rows = []
+                break
+
+            rows = response.json()
+            if not rows:
+                break
+
+            all_rows.extend(rows)
+            last_open_time = int(rows[-1][0])
+            next_cursor = last_open_time + step_ms
+            if next_cursor <= cursor:
+                break
+            cursor = next_cursor
+
+            if len(rows) < 1000:
+                break
+
+        if all_rows:
+            return all_rows
+        if cursor >= end_ms:
+            break
+
+    raise Exception(f"Failed to fetch Binance klines for {symbol}: {' | '.join(errors)}")
+
+
+def fetch_binance_candles(symbol: str, start: str, end: str, rolling_unit="minutes") -> List[dict]:
+    interval = BINANCE_INTERVAL_MAP.get(rolling_unit, "1m")
+    start_ms = _date_string_to_epoch_ms(start)
+    end_ms = _date_string_to_epoch_ms(end)
+
+    print(f"[DEBUG] Requesting Binance candles for {symbol} from {start} to {end} ({interval})")
+    rows = _fetch_binance_klines(symbol, interval, start_ms, end_ms)
+    candles = [
+        {
+            "time_period_start": datetime.fromtimestamp(int(row[0]) / 1000, tz=timezone.utc).isoformat(),
+            "open": float(row[1]),
+            "high": float(row[2]),
+            "low": float(row[3]),
+            "close": float(row[4]),
+            "volume": float(row[5]),
+        }
+        for row in rows
+    ]
+
+    print(f"[DEBUG] Fetched {len(candles)} Binance candles. Sample: {candles[:2]}")
+    return candles
 
 def get_ticker_prices(coins: List[Coin]) -> Dict[Coin, float]:
     """

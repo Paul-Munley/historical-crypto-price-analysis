@@ -26,6 +26,7 @@ class Market:
                  slug: str,
                  yes_price: float,
                  no_price: float,
+                 title_hint: str | None = None,
                  yes_label: str = 'Yes',
                  no_label: str = 'No'):
         self.id: str = identifier
@@ -33,6 +34,7 @@ class Market:
         self.slug: str = slug
         self.yes_price: float = yes_price
         self.no_price: float = no_price
+        self.title_hint: str | None = title_hint
         self.yes_label: str = yes_label
         self.no_label: str = no_label
 
@@ -43,6 +45,7 @@ class Market:
             'slug': self.slug,
             'yes_price': self.yes_price,
             'no_price': self.no_price,
+            'title_hint': self.title_hint,
             'yes_label': self.yes_label,
             'no_label': self.no_label,
         }
@@ -75,22 +78,37 @@ class Market:
         outcome_prices = json.loads(market_object['outcomePrices'])
         yes_price = float(outcome_prices[yes_index])
         no_price = float(outcome_prices[no_index])
+        title_hint = (
+            market_object.get('groupItemTitle')
+            or market_object.get('title')
+            or market_object.get('shortName')
+            or market_object.get('subtitle')
+            or market_object.get('description')
+        )
 
         return Market(market_object['id'],
                       market_object['question'],
                       market_object['slug'],
                       yes_price,
                       no_price,
+                      title_hint,
                       outcomes[yes_index],
                       outcomes[no_index])
 
 
 class Event:
 
-    def __init__(self, identifier: str, slug: str, title: str):
+    def __init__(self,
+                 identifier: str,
+                 slug: str,
+                 title: str,
+                 start_date: str | None = None,
+                 end_date: str | None = None):
         self.id: str = identifier
         self.slug: str = slug
         self.title: str = title
+        self.start_date: str | None = start_date
+        self.end_date: str | None = end_date
         self.markets: List[Market] = []
         self.coin_tag: Optional[Coin] = None
 
@@ -102,6 +120,8 @@ class Event:
             'id': self.id,
             'slug': self.slug,
             'title': self.title,
+            'startDate': self.start_date,
+            'endDate': self.end_date,
             'markets': []
         }
 
@@ -112,7 +132,13 @@ class Event:
 
     @staticmethod
     def parse(event_object: dict) -> "Event":
-        event = Event(event_object['id'], event_object['slug'], event_object['title'])
+        event = Event(
+            event_object['id'],
+            event_object['slug'],
+            event_object['title'],
+            event_object.get('startDate'),
+            event_object.get('endDate'),
+        )
         for market_object in event_object['markets']:
             event.add_market(Market.parse(market_object))
 
@@ -175,7 +201,13 @@ def safe_get_event_by_market_slug(slug: str):
             return None
 
         event_object = event_objects[0]
-        event = Event(event_object['id'], event_object['slug'], event_object['title'])
+        event = Event(
+            event_object['id'],
+            event_object['slug'],
+            event_object['title'],
+            event_object.get('startDate'),
+            event_object.get('endDate'),
+        )
         event.add_market(Market.parse(market_object))
         Event._assign_coin_tag(event, event_object.get('tags', []))
         return event

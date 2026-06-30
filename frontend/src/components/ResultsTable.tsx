@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
 	Box,
+	Button,
 	Card,
 	Table,
 	TableBody,
@@ -22,7 +23,7 @@ import solDesatIcon from "../assets/icons/crypto/sol-desat.png";
 import xrpIcon from "../assets/icons/crypto/xrp.png";
 import xrpDesatIcon from "../assets/icons/crypto/xrp-desat.png";
 
-import { Coin } from "../types";
+import { Coin, TradeSeed } from "../types";
 
 interface ResultRow {
 	threshold: number | string;
@@ -38,6 +39,9 @@ type ResultsData = Record<Coin, ResultRow[]> | ResultRow[];
 
 interface Props {
 	results?: ResultsData;
+	eventTitle?: string;
+	eventSlug?: string;
+	onLogTrade?: (seed: TradeSeed) => void;
 }
 
 // ——— styles ———
@@ -92,7 +96,12 @@ function withRecomputedEV(row: ResultRow, nextYesOdds: number): ResultRow {
 	};
 }
 
-const ResultsTable: React.FC<Props> = ({ results }) => {
+const ResultsTable: React.FC<Props> = ({
+	results,
+	eventTitle = "",
+	eventSlug,
+	onLogTrade,
+}) => {
 	// Normalize incoming data shape (you were already using a flat array)
 	const incomingRows: ResultRow[] = useMemo(() => {
 		if (!results) return [];
@@ -110,7 +119,7 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 	useEffect(() => {
 		// Initialize with recomputed rows to ensure derived fields are consistent
 		const initialized = (incomingRows ?? []).map(r =>
-			withRecomputedEV(r, r.yesOdds)
+			withRecomputedEV(r, r.yesOdds),
 		);
 		setRows(initialized);
 	}, [incomingRows]);
@@ -118,7 +127,7 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 	// Sort by % change desc (your previous behavior)
 	const sortedRows = useMemo(
 		() => [...rows].sort((a, b) => b.change - a.change),
-		[rows]
+		[rows],
 	);
 
 	const handleYesOddsChange = (idxInSorted: number, raw: string) => {
@@ -133,7 +142,7 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 			r =>
 				r.threshold === target.threshold &&
 				r.change === target.change &&
-				r.occurred === target.occurred
+				r.occurred === target.occurred,
 		);
 		if (originalIndex === -1) return;
 
@@ -156,6 +165,7 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 							<TableCell>Yes EV %</TableCell>
 							<TableCell>No PM Odds</TableCell>
 							<TableCell>No EV %</TableCell>
+							<TableCell>Trade</TableCell>
 						</TableRow>
 					</TableHead>
 
@@ -225,6 +235,27 @@ const ResultsTable: React.FC<Props> = ({ results }) => {
 										}}
 									>
 										{row.noEV.toFixed(1)}%
+									</TableCell>
+
+									<TableCell sx={{ border: "none" }}>
+										<Button
+											size="small"
+											variant="outlined"
+											onClick={() =>
+												onLogTrade?.({
+													eventTitle,
+													eventSlug,
+													contractLabel: String(row.threshold),
+													sourceTable: "legacy",
+													yesOdds: row.yesOdds,
+													noOdds: row.noOdds,
+													yesEvPct: row.yesEV,
+													noEvPct: row.noEV,
+												})
+											}
+										>
+											Log Trade
+										</Button>
 									</TableCell>
 								</StyledTableRow>
 							);

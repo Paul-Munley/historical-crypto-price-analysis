@@ -99,6 +99,23 @@ const Header: React.FC = () => {
 						>
 							Analyze
 						</Button>
+
+						<Button
+							component={RouterLink}
+							to="/trades"
+							sx={{
+								color:
+									location.pathname === "/trades" ? "primary.main" : "#ffffff",
+								fontWeight: 500,
+								textTransform: "none",
+								fontSize: "1rem",
+								"&:hover": {
+									color: "primary.main",
+								},
+							}}
+						>
+							Trades
+						</Button>
 					</Box>
 				</Toolbar>
 			</StyledAppBar>

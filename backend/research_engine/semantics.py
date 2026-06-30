@@ -23,6 +23,7 @@ def _extract_price_levels(*texts: str) -> list[float]:
     values: list[float] = []
     seen: set[float] = set()
     dollar_pattern = re.compile(r"\$\s*((?:\d{1,3}(?:,\d{3})+)|\d+)(?:\.(\d+))?")
+    suffix_pattern = re.compile(r"(?<!\d)(\d+(?:\.\d+)?)\s*([kKmM])(?![A-Za-z])")
     fallback_pattern = re.compile(r"(?<!\d)(\d{4,6})(?!\d)")
 
     for text in texts:
@@ -31,6 +32,20 @@ def _extract_price_levels(*texts: str) -> list[float]:
         for whole, decimal in dollar_pattern.findall(text):
             normalized = whole.replace(",", "")
             value = float(f"{normalized}.{decimal}" if decimal else normalized)
+            if value in seen:
+                continue
+            seen.add(value)
+            values.append(value)
+
+    if values:
+        return values
+
+    for text in texts:
+        if not text:
+            continue
+        for number, suffix in suffix_pattern.findall(text):
+            multiplier = 1_000.0 if suffix.lower() == "k" else 1_000_000.0
+            value = float(number) * multiplier
             if value in seen:
                 continue
             seen.add(value)
@@ -57,6 +72,13 @@ def _fmt_price(value: float | None) -> str | None:
     return f"{int(round(value)):,}"
 
 
+def _fmt_hit_label(direction: str, value: float | None) -> str | None:
+    formatted = _fmt_price(value)
+    if formatted is None:
+        return None
+    return f"{direction} {formatted}"
+
+
 def infer_semantics_from_question(
     question: str,
     *,
@@ -69,7 +91,7 @@ def infer_semantics_from_question(
     title = (event_title or "").lower()
     slug_text = (slug or "").lower()
     combined = " ".join([title, q, slug_text]).strip()
-    levels = _extract_price_levels(question or "", slug or "")
+    levels = _extract_price_levels(question or "", event_title or "", slug or "")
 
     if outcome_yes_label.lower() == "up" and outcome_no_label.lower() == "down":
         return SemanticsSpec(
@@ -127,7 +149,7 @@ def infer_semantics_from_question(
 
     if "hit" in combined or "reach" in combined or "↑" in combined or "↓" in combined:
         target = levels[0] if levels else None
-        if "↓" in combined or "below" in combined or "under" in combined:
+        if "↓" in combined or "down" in combined or "below" in combined or "under" in combined:
             return SemanticsSpec(
                 mode="hit_low",
                 uses_intraday_high=False,
@@ -135,7 +157,7 @@ def infer_semantics_from_question(
                 uses_close_only=False,
                 comparison="<=",
                 target_price=target,
-                threshold_label=_fmt_price(target),
+                threshold_label=_fmt_hit_label("↓", target),
                 outcome_yes_label=outcome_yes_label,
                 outcome_no_label=outcome_no_label,
             )
@@ -146,7 +168,7 @@ def infer_semantics_from_question(
             uses_close_only=False,
             comparison=">=",
             target_price=target,
-            threshold_label=_fmt_price(target),
+            threshold_label=_fmt_hit_label("↑", target),
             outcome_yes_label=outcome_yes_label,
             outcome_no_label=outcome_no_label,
         )
